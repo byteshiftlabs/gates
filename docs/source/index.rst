@@ -14,6 +14,8 @@ Welcome to Compi's documentation!
    examples
    modules
    architecture
+   internals
+   code_quality
    testing
    contributing
    known_issues
