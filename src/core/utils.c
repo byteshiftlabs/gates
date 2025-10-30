@@ -3,43 +3,41 @@
 // Helper function to get operator precedence
 int get_precedence(const char *op)
 {
-
-    // Higher number = higher precedence (mirrors C precedence ordering)
     if (!op) {
-        return -999;
+        return PREC_UNKNOWN;
     }
     if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) {
-        return 7;
+        return PREC_MULTIPLICATIVE;
     }
     if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) {
-        return 6;
+        return PREC_ADDITIVE;
     }
     if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) {
-        return 5;
+        return PREC_SHIFT;
     }
     if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
         strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) {
-        return 4;
+        return PREC_RELATIONAL;
     }
     if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) {
-        return 3;
+        return PREC_EQUALITY;
     }
     if (strcmp(op, "&") == 0) {
-        return 2;
+        return PREC_BITWISE_AND;
     }
     if (strcmp(op, "^") == 0) {
-        return 1;
+        return PREC_BITWISE_XOR;
     }
     if (strcmp(op, "|") == 0) {
-        return 0;
+        return PREC_BITWISE_OR;
     }
     if (strcmp(op, "&&") == 0) {
-        return -1; // logical AND
+        return PREC_LOGICAL_AND;
     }
     if (strcmp(op, "||") == 0) {
-        return -2; // logical OR (lowest)
+        return PREC_LOGICAL_OR;
     }
-    return -999; // Unknown operator
+    return PREC_UNKNOWN;
 }
 
 // Helper function to print tree branch decoration
