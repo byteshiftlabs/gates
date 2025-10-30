@@ -12,9 +12,16 @@ How to Contribute
 
 Coding Guidelines
 -----------------
-- Use consistent formatting and naming conventions.
-- Add comments for complex logic and public functions.
-- Ensure code compiles and passes all tests before submitting.
+
+We maintain high code quality standards throughout the project. Please review our :doc:`code_quality` documentation for detailed guidelines on code organization, naming conventions, helper functions, and best practices.
+
+**Key principles:**
+
+- Ensure code compiles and passes all tests before submitting
+- Follow the established patterns and conventions in the codebase
+- Write self-documenting code with clear, descriptive names
+
+See the :doc:`code_quality` section for concrete examples and patterns.
 
 Reporting Issues
 ----------------
