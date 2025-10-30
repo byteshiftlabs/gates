@@ -1,0 +1,5 @@
+if(EXISTS "/home/runner/work/compi/compi/_codeql_build_dir/compi_tests[1]_tests.cmake")
+  include("/home/runner/work/compi/compi/_codeql_build_dir/compi_tests[1]_tests.cmake")
+else()
+  add_test(compi_tests_NOT_BUILT compi_tests_NOT_BUILT)
+endif()
