@@ -1161,13 +1161,13 @@ Parses function call as a statement (discards return value):
        
        if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
        {
-           printf("Error: Expected ')' after function call arguments\n");
+           printf("Error (line %d): Expected ')' after function call arguments\n", current_token.line);
            exit(EXIT_FAILURE);
        }
        
        if (!consume(input, TOKEN_SEMICOLON))
        {
-           printf("Error: Expected ';' after function call\n");
+           printf("Error (line %d): Expected ';' after function call\n", current_token.line);
            exit(EXIT_FAILURE);
        }
        
