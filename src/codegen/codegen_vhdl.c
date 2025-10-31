@@ -652,7 +652,6 @@ static void emit_assignment(ASTNode *assign, FILE *out, const char *indent)
         return;
     }
 
-    fprintf(out, "%s", indent);
     emit_signal_name(lhs->value, out);
     fprintf(out, " <= ");
     gen_node(rhs, out);
