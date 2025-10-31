@@ -193,7 +193,7 @@ static void print_source_context(const char* source_line, int column)
     const char* reset = get_reset_color();
     const char* cyan = colored_output_enabled ? COLOR_CYAN : COLOR_NONE;
     
-    fprintf(stderr, "%s%s%s\n", INDENT_SPACES, cyan, source_line);
+    fprintf(stderr, "%s%s%s%s\n", INDENT_SPACES, cyan, source_line, reset);
     
     // Print caret indicator at the column position
     fprintf(stderr, "%s", INDENT_SPACES);
