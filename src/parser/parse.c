@@ -17,13 +17,14 @@
 extern Token current_token;
 
 // Parse the entire program: delegates to specialized modules
-ASTNode* parse_program(FILE *input) {
+ASTNode* parse_program(FILE *input)
+{
     Token func_name = (Token){0};
     Token return_type = (Token){0};
     Token struct_name_tok = (Token){0};
     ASTNode *func_node = NULL;
     ASTNode *program_node = NULL;
-    ASTNode *s = NULL;
+    ASTNode *struct_node = NULL;
 
     program_node = create_node(NODE_PROGRAM);
 
@@ -40,9 +41,9 @@ ASTNode* parse_program(FILE *input) {
                     struct_name_tok = current_token;
                     advance(input);
                     if (match(TOKEN_BRACE_OPEN)) { // struct definition
-                        s = parse_struct(input, struct_name_tok);
-                        if (s) {
-                            add_child(program_node, s);
+                        struct_node = parse_struct(input, struct_name_tok);
+                        if (struct_node) {
+                            add_child(program_node, struct_node);
                         }
                         continue;
                     }

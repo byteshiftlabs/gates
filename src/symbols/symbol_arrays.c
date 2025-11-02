@@ -5,25 +5,27 @@
 ArrayInfo g_arrays[128];
 int g_array_count = 0;
 
-int find_array_size(const char *name) {
+int find_array_size(const char *name)
+{
 
-    int i = 0;
+    int array_idx = 0;
     if (!name) {
         return -1;
     }
 
-    for (i = 0; i < g_array_count; i++) {
-        if (strcmp(g_arrays[i].name, name) == 0) {
-            return g_arrays[i].size;
+    for (array_idx = 0; array_idx < g_array_count; array_idx++) {
+        if (strcmp(g_arrays[array_idx].name, name) == 0) {
+            return g_arrays[array_idx].size;
         }
     }
 
     return -1;
 }
 
-void register_array(const char *name, int size) {
+void register_array(const char *name, int size)
+{
 
-    int i = 0;
+    int array_idx = 0;
 
     if (!name || size <= 0) {
         return;
@@ -33,9 +35,9 @@ void register_array(const char *name, int size) {
     }
 
     // Prevent duplicates; update size if already present
-    for (i = 0; i < g_array_count; i++) {
-        if (strcmp(g_arrays[i].name, name) == 0) {
-            g_arrays[i].size = size;
+    for (array_idx = 0; array_idx < g_array_count; array_idx++) {
+        if (strcmp(g_arrays[array_idx].name, name) == 0) {
+            g_arrays[array_idx].size = size;
             return;
         }
     }

@@ -10,7 +10,8 @@
 #include "parse.h" // create_node/add_child
 #include "token.h"
 
-static inline void safe_append(char *dst, size_t dst_size, const char *src) {
+static inline void safe_append(char *dst, size_t dst_size, const char *src)
+{
     size_t used = strlen(dst);
     if (used >= dst_size - 1) {
         return;
@@ -24,7 +25,8 @@ static inline void safe_append(char *dst, size_t dst_size, const char *src) {
     dst[used + copy] = '\0';
 }
 
-static inline void safe_copy(char *dst, size_t dst_size, const char *src, size_t nlimit) {
+static inline void safe_copy(char *dst, size_t dst_size, const char *src, size_t nlimit)
+{
     if (!dst_size) {
         return;
     }
@@ -45,7 +47,8 @@ extern ArrayInfo g_arrays[128];
 
 static int s_loop_depth = 0;
 
-ASTNode* parse_statement(FILE *input) {
+ASTNode* parse_statement(FILE *input)
+{
     ASTNode *stmt_node = NULL;
     ASTNode *var_decl_node = NULL;
     ASTNode *init_expr = NULL;

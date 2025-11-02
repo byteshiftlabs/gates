@@ -11,7 +11,8 @@ extern Token current_token;
 extern ArrayInfo g_arrays[128];
 extern int g_array_count;
 
-ASTNode* parse_function(FILE *input, Token return_type, Token func_name) {
+ASTNode* parse_function(FILE *input, Token return_type, Token func_name)
+{
     Token param_type = (Token){0};
     Token param_name = (Token){0};
     Token possible_struct_token = (Token){0}; (void)possible_struct_token;
