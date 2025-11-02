@@ -9,7 +9,8 @@
 #include "symbol_structs.h"
 
 // Safe append helper to avoid strncat truncation warnings
-static inline void safe_append(char *dst, size_t dst_size, const char *src) {
+static inline void safe_append(char *dst, size_t dst_size, const char *src)
+{
     size_t used = strlen(dst);
     if (used >= dst_size - 1) {
         return;
@@ -23,7 +24,8 @@ static inline void safe_append(char *dst, size_t dst_size, const char *src) {
     dst[used + copy] = '\0';
 }
 
-static inline void safe_copy(char *dst, size_t dst_size, const char *src) {
+static inline void safe_copy(char *dst, size_t dst_size, const char *src)
+{
     if (!dst_size) {
         return;
     }
@@ -36,7 +38,8 @@ static inline void safe_copy(char *dst, size_t dst_size, const char *src) {
 }
 
 // Primary: identifiers, numbers, unary minus, logical/bitwise NOT, parentheses, field & array access
-ASTNode* parse_primary(FILE *input) {
+ASTNode* parse_primary(FILE *input)
+{
     ASTNode *inner = NULL;
     ASTNode *node = NULL;
     ASTNode *zero = NULL;
@@ -172,7 +175,8 @@ ASTNode* parse_primary(FILE *input) {
     return NULL;
 }
 
-ASTNode* parse_expression_prec(FILE *input, int min_prec) {
+ASTNode* parse_expression_prec(FILE *input, int min_prec)
+{
     ASTNode *left = NULL;
     ASTNode *right = NULL;
     ASTNode *bin = NULL;
