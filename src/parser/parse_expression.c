@@ -16,12 +16,6 @@
 #define FULL_EXPRESSION_BUFFER_SIZE (IDENTIFIER_BUFFER_SIZE + INDEX_EXPRESSION_BUFFER_SIZE + 3)
 #define OPERATOR_COPY_BUFFER_SIZE 8
 
-// Precedence constants for expression parsing
-// Parenthesized expressions start at precedence 1 (above bitwise OR at 0)
-#define PARENTHESIZED_EXPR_MIN_PRECEDENCE 1
-// Top-level expressions start at -2 (includes all operators including logical OR at -2)
-#define TOP_LEVEL_EXPR_MIN_PRECEDENCE -2
-
 // Forward declarations for helper functions (mutual recursion with parse_primary)
 static ASTNode* parse_logical_not(FILE *input);
 static ASTNode* parse_bitwise_not(FILE *input);
@@ -130,7 +124,7 @@ static ASTNode* parse_parenthesized_expr(FILE *input)
     ASTNode *expr_node = NULL;
     
     advance(input);
-    expr_node = parse_expression_prec(input, PARENTHESIZED_EXPR_MIN_PRECEDENCE);
+    expr_node = parse_expression_prec(input, PREC_PARENTHESIZED_MIN);
     
     if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
         printf("Error (line %d): Expected ')' after expression\n", current_token.line);
@@ -331,5 +325,5 @@ ASTNode* parse_expression_prec(FILE *input, int min_prec)
 
 ASTNode* parse_expression(FILE *input)
 { 
-    return parse_expression_prec(input, TOP_LEVEL_EXPR_MIN_PRECEDENCE);
+    return parse_expression_prec(input, PREC_TOP_LEVEL_MIN);
 }
