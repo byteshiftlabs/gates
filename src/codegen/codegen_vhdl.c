@@ -281,7 +281,9 @@ static void gen_while(ASTNode *node, FILE *out) {
     fprintf(out, "      while ");
     emit_condition(cond, out);
     fprintf(out, " loop\n");
-    for (int j = 1; j < node->num_children; ++j) gen_node(node->children[j], out);
+    for (int j = 1; j < node->num_children; ++j) {
+        gen_node(node->children[j], out);
+    }
     fprintf(out, "      end loop;\n");
 }
 
@@ -355,10 +357,14 @@ static void gen_if(ASTNode *node, FILE *out) {
             fprintf(out, "      elsif ");
             emit_condition(elseif_cond, out);
             fprintf(out, " then\n");
-            for (int k = 1; k < branch->num_children; ++k) gen_node(branch->children[k], out);
+            for (int k = 1; k < branch->num_children; ++k) {
+                gen_node(branch->children[k], out);
+            }
         } else if (branch->type == NODE_ELSE_STATEMENT) {
             fprintf(out, "      else\n");
-            for (int k = 0; k < branch->num_children; ++k) gen_node(branch->children[k], out);
+            for (int k = 0; k < branch->num_children; ++k) {
+                gen_node(branch->children[k], out);
+            }
         } else {
             gen_node(branch, out);
         }
@@ -397,8 +403,23 @@ static void gen_binary_expr(ASTNode *node, FILE *out) {
             if (is_negative_literal(left->value)) {
                 fprintf(out, "to_signed(%s, 32)", left->value);
             } else {
-                int is_num = 1; const char *p = left->value; if (!*p) is_num = 0; while (*p) { if (!isdigit(*p) && *p != '.') { is_num = 0; break; } ++p; }
-                if (is_num) fprintf(out, "to_unsigned(%s, 32)", left->value); else fprintf(out, "unsigned(%s)", left->value);
+                int is_num = 1;
+                const char *p = left->value;
+                if (!*p) {
+                    is_num = 0;
+                }
+                while (*p) {
+                    if (!isdigit(*p) && *p != '.') {
+                        is_num = 0;
+                        break;
+                    }
+                    ++p;
+                }
+                if (is_num) {
+                    fprintf(out, "to_unsigned(%s, 32)", left->value);
+                } else {
+                    fprintf(out, "unsigned(%s)", left->value);
+                }
             }
         } else {
             fprintf(out, "unsigned("); gen_node(left, out); fprintf(out, ")");
@@ -409,8 +430,23 @@ static void gen_binary_expr(ASTNode *node, FILE *out) {
             if (is_negative_literal(right->value)) {
                 fprintf(out, "to_signed(%s, 32)", right->value);
             } else {
-                int is_num = 1; const char *p = right->value; if (!*p) is_num = 0; while (*p) { if (!isdigit(*p) && *p != '.') { is_num = 0; break; } ++p; }
-                if (is_num) fprintf(out, "to_unsigned(%s, 32)", right->value); else fprintf(out, "unsigned(%s)", right->value);
+                int is_num = 1;
+                const char *p = right->value;
+                if (!*p) {
+                    is_num = 0;
+                }
+                while (*p) {
+                    if (!isdigit(*p) && *p != '.') {
+                        is_num = 0;
+                        break;
+                    }
+                    ++p;
+                }
+                if (is_num) {
+                    fprintf(out, "to_unsigned(%s, 32)", right->value);
+                } else {
+                    fprintf(out, "unsigned(%s)", right->value);
+                }
             }
         } else {
             fprintf(out, "unsigned("); gen_node(right, out); fprintf(out, ")");
@@ -681,7 +717,9 @@ static void emit_local_signals(ASTNode *function_decl, FILE *out) {
                                 if (strcmp(stmt_child->token.value, "int") == 0) {
                                     char bitstr[40] = {0};
                                     int num = atoi(val);
-                                    for (int b = 31; b >= 0; --b) bitstr[31 - b] = ((num >> b) & 1) ? '1' : '0';
+                                    for (int b = 31; b >= 0; --b) {
+                                        bitstr[31 - b] = ((num >> b) & 1) ? '1' : '0';
+                                    }
                                     bitstr[32] = '\0';
                                     fprintf(out, "\"%s\"%s", bitstr, (k < init_list->num_children - 1) ? ", " : "");
                                 } else if (strcmp(stmt_child->token.value, "float") == 0 || strcmp(stmt_child->token.value, "double") == 0) {
