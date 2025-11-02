@@ -1,0 +1,1 @@
+/home/runner/work/compi/.codeql-scratch/dbs/cpp/working/autobuild/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/compi_tests.dir/link.d CMakeFiles/compi_tests.dir/tests/basic_tests.cpp.o -o compi_tests  lib/libgtest_main.a libcompi_gtest.a lib/libgtest.a
