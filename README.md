@@ -6,6 +6,7 @@ Minimal C subset → VHDL translator. Focused on simple functions, control flow,
 * Tokenizer, recursive-descent parser, AST builder
 * Expressions with precedence (arith / shifts / bitwise / compare / logical / unary)
 * Control flow: `if / else if / else`, `while`, `for`, `break`, `continue`
+* Function calls: in expressions, statements, conditions, and nested calls
 * Structs: declarations, assignments, field access, and C-style initializers
 * Arrays with declarations, initializers, indexed access
 * Basic VHDL code generation (entity/architecture skeleton + signal mapping)
@@ -77,4 +78,4 @@ Shortcuts:
 Arithmetic, shifts, bitwise, comparisons, logical (no short‑circuit semantics), unary minus / logical not, control flow + arrays.
 
 ## 🗺️ Roadmap (Short)
-Next focus areas: global vars, function calls, nested structs, arrays of structs, better diagnostics, naming & optimization improvements, integration & coverage tests. Full details: see docs (architecture / roadmap sections).
+Next focus areas: global vars, nested structs, arrays of structs, better diagnostics, naming & optimization improvements, integration & coverage tests. Full details: see docs (architecture / roadmap sections).
