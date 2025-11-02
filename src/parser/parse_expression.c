@@ -213,19 +213,19 @@ static void validate_array_bounds(const char *identifier_name, const char *index
 
 // Helper: Parse function call arguments
 /**
- * Parses a function call with its arguments.
+ * Parses function call arguments (shared helper for expressions and statements).
  * 
- * Syntax: function_name(arg1, arg2, ..., argN)
+ * Syntax: (arg1, arg2, ..., argN)
  * 
  * The opening parenthesis should already be matched before calling this function.
  * This function consumes the opening parenthesis, parses comma-separated arguments,
  * and expects a closing parenthesis.
  * 
  * @param input         Input file stream
- * @param function_name Name of the function being called
+ * @param function_name Name of the function being called (for error messages)
  * @return              NODE_FUNC_CALL node with arguments as children
  */
-static ASTNode* parse_function_call(FILE *input, const char *function_name)
+ASTNode* parse_function_call_args(FILE *input, const char *function_name)
 {
     ASTNode *call_node = NULL;
     ASTNode *arg_node = NULL;
@@ -264,6 +264,24 @@ static ASTNode* parse_function_call(FILE *input, const char *function_name)
     }
     
     return call_node;
+}
+
+/**
+ * Parses a function call with its arguments.
+ * 
+ * Syntax: function_name(arg1, arg2, ..., argN)
+ * 
+ * The opening parenthesis should already be matched before calling this function.
+ * This function consumes the opening parenthesis, parses comma-separated arguments,
+ * and expects a closing parenthesis.
+ * 
+ * @param input         Input file stream
+ * @param function_name Name of the function being called
+ * @return              NODE_FUNC_CALL node with arguments as children
+ */
+static ASTNode* parse_function_call(FILE *input, const char *function_name)
+{
+    return parse_function_call_args(input, function_name);
 }
 
 // Helper: Parse identifier with optional field access, array indexing, or function call
