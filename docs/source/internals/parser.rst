@@ -1085,8 +1085,8 @@ Parses function call in expression context:
        
        if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
        {
-           printf("Error: Expected ')' after function call arguments for '%s'\n",
-                  function_name);
+           printf("Error (line %d): Expected ')' after function call arguments for '%s'\n",
+                  current_token.line, function_name);
            exit(EXIT_FAILURE);
        }
        
