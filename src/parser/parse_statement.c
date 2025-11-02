@@ -272,6 +272,24 @@ static void parse_lhs_expression(FILE *input, Token lhs_token, char *lhs_buf, si
 }
 
 // Helper: Parse assignment statement or expression statement
+// Helper: Parse function call as statement (standalone call that doesn't use return value)
+static ASTNode* parse_standalone_function_call(FILE *input, const char *function_name)
+{
+    ASTNode *func_call_node = NULL;
+    
+    // Use shared helper to parse function call arguments
+    func_call_node = parse_function_call_args(input, function_name);
+    
+    // Expect semicolon after statement
+    if (!consume(input, TOKEN_SEMICOLON))
+    {
+        printf("Error (line %d): Expected ';' after function call\n", current_token.line);
+        exit(EXIT_FAILURE);
+    }
+    
+    return func_call_node;
+}
+
 static ASTNode* parse_assignment_or_expression(FILE *input)
 {
     Token lhs_token = current_token;
@@ -284,34 +302,47 @@ static ASTNode* parse_assignment_or_expression(FILE *input)
     
     advance(input);
     
+    // Check for function call: identifier(...)
+    if (match(TOKEN_PARENTHESIS_OPEN))
+    {
+        return parse_standalone_function_call(input, lhs_token.value);
+    }
+    
     parse_lhs_expression(input, lhs_token, lhs_buf, sizeof(lhs_buf),
                         idx_buf, sizeof(idx_buf), base_name, sizeof(base_name));
     
     lhs_expr = create_node(NODE_EXPRESSION);
     lhs_expr->value = strdup(lhs_buf);
     
-    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
+    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0)
+    {
         advance(input);
         assign_node = create_node(NODE_ASSIGNMENT);
         add_child(assign_node, lhs_expr);
         
         rhs_node = parse_expression(input);
-        if (rhs_node) {
+        if (rhs_node)
+        {
             add_child(assign_node, rhs_node);
         }
         
-        if (!consume(input, TOKEN_SEMICOLON)) {
+        if (!consume(input, TOKEN_SEMICOLON))
+        {
             printf("Error (line %d): Expected ';' after assignment\n", current_token.line);
             exit(EXIT_FAILURE);
         }
         
         return assign_node;
-    } else {
+    }
+    else
+    {
         // Not an assignment, skip to semicolon
-        while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
+        while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF))
+        {
             advance(input);
         }
-        if (match(TOKEN_SEMICOLON)) {
+        if (match(TOKEN_SEMICOLON))
+        {
             advance(input);
         }
         free_node(lhs_expr);
