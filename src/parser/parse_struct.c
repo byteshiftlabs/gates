@@ -6,80 +6,130 @@
 #include "parse.h"
 #include "token.h"
 
-static inline void safe_copy(char *dst, size_t dst_size, const char *src) {
+#define MAX_STRUCT_FIELDS 32
+
+static inline void safe_copy(char *dst, size_t dst_size, const char *src)
+{
     if (!dst_size) {
         return;
     }
-    size_t n = strlen(src);
-    if (n >= dst_size) {
-        n = dst_size - 1;
+    size_t copy_length = strlen(src);
+    if (copy_length >= dst_size) {
+        copy_length = dst_size - 1;
     }
-    memcpy(dst, src, n);
-    dst[n] = '\0';
+    memcpy(dst, src, copy_length);
+    dst[copy_length] = '\0';
 }
 
 extern Token current_token;
 
-// Parse struct definition: struct Name { type field; ... };
-ASTNode* parse_struct(FILE *input, Token struct_name_tok) {
-    ASTNode *snode = NULL;
-    int struct_index = 0;
-    Token ftype = (Token){0};
-    Token fname = (Token){0};
-    ASTNode *field = NULL;
-    StructInfo *si = NULL;
+// Forward declarations
+static void register_struct_in_table(int struct_index, Token struct_name_token);
+static ASTNode* parse_struct_field(FILE *input, int struct_index);
+static void register_field_in_struct(int struct_index, Token field_type, Token field_name);
 
+
+// Register struct name in global struct table
+static void register_struct_in_table(int struct_index, Token struct_name_token)
+{
+    if (g_struct_count < (int)(sizeof(g_structs)/sizeof(g_structs[0]))) {
+        safe_copy(g_structs[struct_index].name, 
+                  sizeof(g_structs[struct_index].name), 
+                  struct_name_token.value);
+        g_structs[struct_index].field_count = 0;
+    }
+}
+
+// Register a field in the struct's field table
+static void register_field_in_struct(int struct_index, Token field_type, Token field_name)
+{
+    if (struct_index != g_struct_count || 
+        g_struct_count >= (int)(sizeof(g_structs)/sizeof(g_structs[0]))) {
+        return;
+    }
+    
+    StructInfo *struct_info = &g_structs[struct_index];
+    if (struct_info->field_count >= MAX_STRUCT_FIELDS) {
+        return;
+    }
+    
+    int field_index = struct_info->field_count;
+    safe_copy(struct_info->fields[field_index].field_name, 
+              sizeof(struct_info->fields[field_index].field_name), 
+              field_name.value);
+    safe_copy(struct_info->fields[field_index].field_type, 
+              sizeof(struct_info->fields[field_index].field_type), 
+              field_type.value);
+    struct_info->field_count++;
+}
+
+// Parse a single struct field: type name;
+static ASTNode* parse_struct_field(FILE *input, int struct_index)
+{
+    if (!match(TOKEN_KEYWORD)) {
+        return NULL;
+    }
+    
+    Token field_type = current_token;
+    advance(input);
+    
+    if (!match(TOKEN_IDENTIFIER)) {
+        printf("Error (line %d): Expected field name in struct\n", current_token.line);
+        exit(EXIT_FAILURE);
+    }
+    
+    Token field_name = current_token;
+    advance(input);
+    
+    ASTNode *field_node = create_node(NODE_VAR_DECL);
+    field_node->token = field_type;
+    field_node->value = strdup(field_name.value);
+    
+    register_field_in_struct(struct_index, field_type, field_name);
+    
+    if (!consume(input, TOKEN_SEMICOLON)) {
+        printf("Error (line %d): Expected ';' after struct field\n", current_token.line);
+        exit(EXIT_FAILURE);
+    }
+    
+    return field_node;
+}
+
+// Parse struct definition: struct Name { type field; ... };
+ASTNode* parse_struct(FILE *input, Token struct_name_token)
+{
     if (!consume(input, TOKEN_BRACE_OPEN)) {
         printf("Error (line %d): Expected '{' after struct name\n", current_token.line);
         return NULL;
     }
-    snode = create_node(NODE_STRUCT_DECL);
-    snode->value = strdup(struct_name_tok.value);
-    // Register in table
-    if (g_struct_count < (int)(sizeof(g_structs)/sizeof(g_structs[0]))) {
-        safe_copy(g_structs[g_struct_count].name, sizeof(g_structs[g_struct_count].name), struct_name_tok.value);
-        g_structs[g_struct_count].field_count = 0;
-    }
-    struct_index = g_struct_count;
+    
+    ASTNode *struct_node = create_node(NODE_STRUCT_DECL);
+    struct_node->value = strdup(struct_name_token.value);
+    
+    int struct_index = g_struct_count;
+    register_struct_in_table(struct_index, struct_name_token);
+    
+    // Parse all fields
     while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
-        if (match(TOKEN_KEYWORD)) {
-            ftype = current_token;
-            advance(input);
-            if (match(TOKEN_IDENTIFIER)) {
-                fname = current_token;
-                advance(input);
-                field = create_node(NODE_VAR_DECL);
-                field->token = ftype;
-                field->value = strdup(fname.value);
-                add_child(snode, field);
-                if (struct_index == g_struct_count && g_struct_count < (int)(sizeof(g_structs)/sizeof(g_structs[0]))) {
-                    si = &g_structs[struct_index];
-                    if (si->field_count < 32) {
-                        safe_copy(si->fields[si->field_count].field_name, sizeof(si->fields[si->field_count].field_name), fname.value);
-                        safe_copy(si->fields[si->field_count].field_type, sizeof(si->fields[si->field_count].field_type), ftype.value);
-                        si->field_count++;
-                    }
-                }
-                if (!consume(input, TOKEN_SEMICOLON)) {
-                    printf("Error (line %d): Expected ';' after struct field\n", current_token.line);
-                    exit(EXIT_FAILURE);
-                }
-            } else {
-                printf("Error (line %d): Expected field name in struct\n", current_token.line);
-                exit(EXIT_FAILURE);
-            }
+        ASTNode *field_node = parse_struct_field(input, struct_index);
+        if (field_node) {
+            add_child(struct_node, field_node);
         } else {
+            // Skip unknown tokens
             advance(input);
         }
     }
+    
     if (!consume(input, TOKEN_BRACE_CLOSE)) {
         printf("Error (line %d): Expected '}' after struct body\n", current_token.line);
     }
     if (!consume(input, TOKEN_SEMICOLON)) {
         printf("Error (line %d): Expected ';' after struct declaration\n", current_token.line);
     }
+    
     if (struct_index == g_struct_count) {
         g_struct_count++;
     }
-    return snode;
+    
+    return struct_node;
 }
