@@ -1,16 +1,15 @@
 # Compi: C-to-VHDL Compiler
 
-Minimal C subset → VHDbuild/      — Build output (generated)
-```
+Minimal C subset → VHDL
 
 ## 🚧 Known Limitations & Issues
 * Global variables not yet implemented
 * No C short-circuit evaluation for logical operators
 * Basic VHDL optimization (no resource tuning)
 * Limited struct support: no nested structs or arrays of structs yet
-* Potential signal naming collisions
 
-## ✅ Operator Coverage (Summary)for exploring software → hardware mapping.
+## 🗺️ Roadmap
+Global variables, nested structs, arrays of structs, enhanced diagnostics, VHDL optimizations. See full docs for details.r exploring software → hardware mapping.
 
 ## Key Features
 * **Parser**: Tokenizer, recursive-descent parser, AST builder
