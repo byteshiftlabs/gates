@@ -40,6 +40,7 @@ static void gen_break(ASTNode *node, FILE *out);
 static void gen_continue(ASTNode *node, FILE *out);
 static void gen_binary_expr(ASTNode *node, FILE *out);
 static void gen_expression(ASTNode *node, FILE *out);
+static const char* get_signal_name(const char *var_name);
 static void gen_unary_op(ASTNode *node, FILE *out);
 static void gen_func_call(ASTNode *node, FILE *out);
 
@@ -53,6 +54,22 @@ static void emit_boolean_gate(ASTNode *left, ASTNode *right, const char *logical
 static void emit_struct_declarations(FILE *out);
 static void emit_local_signals(ASTNode *function_decl, FILE *out);
 static void emit_struct_return_copy(ASTNode *expr, ASTNode *function_stmt_node, FILE *out, const char *indent);
+
+// -------------------------------------------------------------
+// Helper function to get the correct signal name
+// (handles 'result' collision by mapping to a safe internal name)
+// This function checks if a variable name conflicts with the output port
+// 'result' and generates a collision-free name by appending '_local' suffix.
+// -------------------------------------------------------------
+static const char* get_signal_name(const char *var_name)
+{
+    static char buffer[128];
+    if (var_name && strcmp(var_name, "result") == 0) {
+        snprintf(buffer, sizeof(buffer), "%s_local", var_name);
+        return buffer;
+    }
+    return var_name;
+}
 
 // -------------------------------------------------------------
 // Public entry point
@@ -532,7 +549,8 @@ static void gen_expression(ASTNode *node, FILE *out)
         return;
     }
 
-    fprintf(out, "%s", node->value);
+    // Use mapped signal name for variables
+    fprintf(out, "%s", get_signal_name(node->value));
 }
 
 // -------------------------------------------------------------
@@ -589,7 +607,7 @@ static void emit_initializer(ASTNode *decl, FILE *out, const char *indent)
     if (!decl || decl->num_children == 0) return;
 
     ASTNode *init = decl->children[0];
-    fprintf(out, "%s%s <= ", indent, decl->value ? decl->value : "unknown");
+    fprintf(out, "%s%s <= ", indent, get_signal_name(decl->value) ? get_signal_name(decl->value) : "unknown");
     gen_node(init, out);
     fprintf(out, ";\n");
 }
@@ -625,7 +643,7 @@ static void emit_assignment(ASTNode *assign, FILE *out, const char *indent)
         return;
     }
 
-    fprintf(out, "%s <= ", lhs->value ? lhs->value : "unknown");
+    fprintf(out, "%s <= ", get_signal_name(lhs->value) ? get_signal_name(lhs->value) : "unknown");
     gen_node(rhs, out);
     fprintf(out, ";\n");
 }
@@ -765,7 +783,7 @@ static void emit_local_signals(ASTNode *function_decl, FILE *out)
                         }
                     }
                 } else if (strcmp(stmt_child->value, "result") == 0) {
-                    fprintf(out, "  signal internal_%s : %s;\n", stmt_child->value, ctype_to_vhdl(stmt_child->token.value));
+                    fprintf(out, "  signal %s : %s;\n", get_signal_name(stmt_child->value), ctype_to_vhdl(stmt_child->token.value));
                 } else {
                     fprintf(out, "  signal %s : %s;\n", stmt_child->value, ctype_to_vhdl(stmt_child->token.value));
                 }
