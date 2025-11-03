@@ -102,7 +102,6 @@ Roadmap
    - Improve error messages and diagnostics for unsupported constructs
 5. VHDL Codegen Enhancements
    - Optimize generated VHDL for hardware resources and timing
-   - Handle signal name collisions (e.g., local result)
 6. Documentation & Examples
    - Expand Sphinx documentation with module, function, and data structure details
    - Add more example C files and expected VHDL outputs
