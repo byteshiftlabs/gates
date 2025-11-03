@@ -1,6 +1,6 @@
 # Compi: C-to-VHDL Compiler
 
-Minimal C subset → VHDL
+Minimal C subset → VHDL translator
 
 ## 🚧 Known Limitations & Issues
 * Global variables not yet implemented
