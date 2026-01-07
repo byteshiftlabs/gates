@@ -23,7 +23,12 @@ set(COMPI_ALL_SRC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_struct.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_function.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_statement.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_main.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_constants.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_helpers.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_types.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_expressions.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_statements.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/token.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/core/utils.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/symbols/symbol_structs.c
