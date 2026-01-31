@@ -1,6 +1,47 @@
 #include "utils.h"
 
-// Helper function to print tree branches for AST visualization
+// Helper function to get operator precedence
+int get_precedence(const char *op) {
+
+    // Higher number = higher precedence (mirrors C precedence ordering)
+    if (!op) {
+        return -999;
+    }
+    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) {
+        return 7;
+    }
+    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) {
+        return 6;
+    }
+    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) {
+        return 5;
+    }
+    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
+        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) {
+        return 4;
+    }
+    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) {
+        return 3;
+    }
+    if (strcmp(op, "&") == 0) {
+        return 2;
+    }
+    if (strcmp(op, "^") == 0) {
+        return 1;
+    }
+    if (strcmp(op, "|") == 0) {
+        return 0;
+    }
+    if (strcmp(op, "&&") == 0) {
+        return -1; // logical AND
+    }
+    if (strcmp(op, "||") == 0) {
+        return -2; // logical OR (lowest)
+    }
+    return -999; // Unknown operator
+}
+
+// Helper function to print tree branch decoration
 void print_tree_prefix(int level, int is_last) {
 
     int i = 0;
@@ -15,15 +56,23 @@ int is_number_str(const char *s) {
 
     const char *p = NULL;
 
-    if (!s || !*s) return 0;
+    if (!s || !*s) {
+        return 0;
+    }
 
     p = s;
 
-    if (*p == '+' || *p == '-') p++;
-    if (!*p) return 0;
+    if (*p == '+' || *p == '-') {
+        p++;
+    }
+    if (!*p) {
+        return 0;
+    }
 
     while (*p) {
-        if (!isdigit((unsigned char)*p)) return 0;
+        if (!isdigit((unsigned char)*p)) {
+            return 0;
+        }
         p++;
     }
 
@@ -51,25 +100,6 @@ int is_negative_literal(const char* value) {
     return has_valid;
 }
 
-int get_precedence(const char *op) {
-
-    // Higher number = higher precedence (mirrors C precedence ordering)
-    if (!op) return -999;
-    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return 7;
-    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 6;
-    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) return 5;
-    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
-        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 4;
-    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 3;
-    if (strcmp(op, "&") == 0) return 2;
-    if (strcmp(op, "^") == 0) return 1;
-    if (strcmp(op, "|") == 0) return 0;
-    if (strcmp(op, "&&") == 0) return -1; // logical AND
-    if (strcmp(op, "||") == 0) return -2; // logical OR (lowest)
-    return -1000; // unknown
-}
-
-
 // Print the AST recursively in a readable tree format
 void print_ast(ASTNode* node, int level) {
 
@@ -77,7 +107,9 @@ void print_ast(ASTNode* node, int level) {
     int i = 0;
     ASTNode *parent = NULL;
 
-    if (!node) return;
+    if (!node) {
+        return;
+    }
 
     // Find if this node is the last child
     if (node->parent) {

@@ -24,7 +24,9 @@ ASTNode* create_node(NodeType type) {
 // Free an AST node and all its children
 void free_node(ASTNode *node) {
 
-    if (!node) return;
+    if (!node) {
+        return;
+    }
     
     for (int i = 0; i < node->num_children; i++) {
         free_node(node->children[i]);
