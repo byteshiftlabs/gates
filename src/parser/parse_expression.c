@@ -34,10 +34,10 @@ static inline void safe_append(char *dst, size_t dst_size, const char *src)
     if (used >= dst_size - 1) {
         return;
     }
-    size_t avail = dst_size - 1 - used;
+    size_t available_space = dst_size - 1 - used;
     size_t copy = strlen(src);
-    if (copy > avail) {
-        copy = avail;
+    if (copy > available_space) {
+        copy = available_space;
     }
     memcpy(dst + used, src, copy);
     dst[used + copy] = '\0';
