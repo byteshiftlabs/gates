@@ -6,7 +6,8 @@
 #include "parse.h"
 #include "token.h"
 
-static inline void safe_copy(char *dst, size_t dst_size, const char *src) {
+static inline void safe_copy(char *dst, size_t dst_size, const char *src)
+{
     if (!dst_size) {
         return;
     }
@@ -21,7 +22,8 @@ static inline void safe_copy(char *dst, size_t dst_size, const char *src) {
 extern Token current_token;
 
 // Parse struct definition: struct Name { type field; ... };
-ASTNode* parse_struct(FILE *input, Token struct_name_tok) {
+ASTNode* parse_struct(FILE *input, Token struct_name_tok)
+{
     ASTNode *snode = NULL;
     int struct_index = 0;
     Token ftype = (Token){0};

@@ -16,19 +16,22 @@ const char *keywords[] = {
 };
 
 // Get the next token and update current_token
-void advance(FILE *input) {
+void advance(FILE *input)
+{
     current_token = get_next_token(input);
 }
 
 
 // Check if current token matches expected type
-int match(TokenType type) {
+int match(TokenType type)
+{
     return current_token.type == type;
 }
 
 
 // Consume the current token if it matches expected type
-int consume(FILE *input, TokenType type) {
+int consume(FILE *input, TokenType type)
+{
 
     if (match(type)) {
         advance(input);
@@ -38,11 +41,12 @@ int consume(FILE *input, TokenType type) {
 }
 
 // Check if a string is a keyword
-int is_keyword(const char *str) {
+int is_keyword(const char *str)
+{
 
-    int i = 0;
-    for (i = 0; keywords[i] != NULL; i++) {
-        if (strcmp(str, keywords[i]) == 0) {
+    int keyword_idx = 0;
+    for (keyword_idx = 0; keywords[keyword_idx] != NULL; keyword_idx++) {
+        if (strcmp(str, keywords[keyword_idx]) == 0) {
             return 1;
         }
     }
@@ -50,7 +54,8 @@ int is_keyword(const char *str) {
 }
 
 // Get the next token from input
-Token get_next_token(FILE *input) {
+Token get_next_token(FILE *input)
+{
     
     Token token = {0};
     int current_char = 0;        // Current character being read

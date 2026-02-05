@@ -2,7 +2,8 @@
 #include <stdlib.h>
 
 // Create a new AST node
-ASTNode* create_node(NodeType type) {
+ASTNode* create_node(NodeType type)
+{
 
     ASTNode *node = (ASTNode*)malloc(sizeof(ASTNode));
 
@@ -22,14 +23,15 @@ ASTNode* create_node(NodeType type) {
 }
 
 // Free an AST node and all its children
-void free_node(ASTNode *node) {
+void free_node(ASTNode *node)
+{
 
     if (!node) {
         return;
     }
     
-    for (int i = 0; i < node->num_children; i++) {
-        free_node(node->children[i]);
+    for (int child_idx = 0; child_idx < node->num_children; child_idx++) {
+        free_node(node->children[child_idx]);
     }
     
     free(node->children);
@@ -38,7 +40,8 @@ void free_node(ASTNode *node) {
 }
 
 // Add a child node
-void add_child(ASTNode *parent, ASTNode *child) {
+void add_child(ASTNode *parent, ASTNode *child)
+{
 
     if (!parent->children) {
         parent->capacity = 4;  // Start with space for 4 children
