@@ -10,40 +10,49 @@
 #include "parse.h" // create_node/add_child
 #include "token.h"
 
+// Constants
+#define MAX_ARRAYS 128
+#define ARRAY_SIZE_BUFFER_SIZE 256
+#define LHS_BUFFER_SIZE 1024
+#define INDEX_BUFFER_SIZE 512
+#define BASE_NAME_BUFFER_SIZE 128
+#define GENERAL_BUFFER_SIZE 1024
+#define INITIAL_PARENTHESIS_DEPTH 0
+
 static inline void safe_append(char *dst, size_t dst_size, const char *src)
 {
     size_t used = strlen(dst);
     if (used >= dst_size - 1) {
         return;
     }
-    size_t avail = dst_size - 1 - used;
-    size_t copy = strlen(src);
-    if (copy > avail) {
-        copy = avail;
+    size_t available_space = dst_size - 1 - used;
+    size_t copy_length = strlen(src);
+    if (copy_length > available_space) {
+        copy_length = available_space;
     }
-    memcpy(dst + used, src, copy);
-    dst[used + copy] = '\0';
+    memcpy(dst + used, src, copy_length);
+    dst[used + copy_length] = '\0';
 }
 
-static inline void safe_copy(char *dst, size_t dst_size, const char *src, size_t nlimit)
+static inline void safe_copy(char *dst, size_t dst_size, const char *src, size_t limit)
 {
     if (!dst_size) {
         return;
     }
-    size_t n = strlen(src);
-    if (n > nlimit) {
-        n = nlimit;
+    size_t source_length = strlen(src);
+    if (source_length > limit) {
+        source_length = limit;
     }
-    if (n >= dst_size) {
-        n = dst_size - 1;
+    if (source_length >= dst_size) {
+        source_length = dst_size - 1;
     }
-    memcpy(dst, src, n);
-    dst[n] = '\0';
+    memcpy(dst, src, source_length);
+    dst[source_length] = '\0';
 }
 
 extern Token current_token;
 extern int g_array_count;
-extern ArrayInfo g_arrays[128];
+extern ArrayInfo g_arrays[MAX_ARRAYS];
 
 static int s_loop_depth = 0;
 
@@ -90,15 +99,15 @@ ASTNode* parse_statement(FILE *input)
     long saved_pos = 0;
     int is_struct = 0;
     int is_array = 0;
-    int paren_depth = 0;
+    int paren_depth = INITIAL_PARENTHESIS_DEPTH;
     int arr_size = 0;
     int idx_val = 0;
     size_t len = 0;
-    char arr_size_buf[256] = {0};
-    char lhs_buf[1024] = {0};
-    char idx_buf[512] = {0};
-    char base_name[128] = {0};
-    char buf[1024] = {0};
+    char arr_size_buf[ARRAY_SIZE_BUFFER_SIZE] = {0};
+    char lhs_buf[LHS_BUFFER_SIZE] = {0};
+    char idx_buf[INDEX_BUFFER_SIZE] = {0};
+    char base_name[BASE_NAME_BUFFER_SIZE] = {0};
+    char buf[GENERAL_BUFFER_SIZE] = {0};
     const char *delim = NULL;
 
     stmt_node = create_node(NODE_STATEMENT);
