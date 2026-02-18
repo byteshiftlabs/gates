@@ -132,8 +132,10 @@ Entry point for expression parsing. Delegates to ``parse_expression_prec()`` wit
 .. code-block:: c
 
    ASTNode* parse_expression(FILE *input) { 
-       return parse_expression_prec(input, -2); 
+       return parse_expression_prec(input, TOP_LEVEL_EXPR_MIN_PRECEDENCE);
    }
+
+The ``TOP_LEVEL_EXPR_MIN_PRECEDENCE`` constant is set to ``-2`` to include all operators (including logical OR at precedence -2).
 
 parse_expression_prec()
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -147,28 +149,38 @@ Implements **precedence climbing** to parse binary expressions with correct oper
 .. code-block:: c
 
    ASTNode* parse_expression_prec(FILE *input, int min_prec) {
-       ASTNode *left = parse_primary(input);
-       if (!left) return NULL;
+       ASTNode *left_operand = parse_primary(input);
+       if (!left_operand) {
+           return NULL;
+       }
        
        while (match(TOKEN_OPERATOR)) {
-           const char *op = current_token.value;
-           int prec = get_precedence(op);
+           const char *operator = current_token.value;
+           int operator_precedence = get_precedence(operator);
            
-           if (prec < min_prec) break;  // Precedence too low, stop
+           if (operator_precedence < min_prec) {
+               break;  // Precedence too low, stop
+           }
            
+           char operator_copy[8] = {0};
+           safe_copy(operator_copy, sizeof(operator_copy), operator);
            advance(input);  // Consume operator
            
-           // Right-associative: use prec+1 for left-associative operators
-           ASTNode *right = parse_expression_prec(input, prec + 1);
+           ASTNode *right_operand = parse_expression_prec(input, operator_precedence + 1);
+           if (!right_operand) {
+               printf("Error: Expected right operand after operator '%s'\n", operator_copy);
+               exit(EXIT_FAILURE);
+           }
            
            // Build binary expression node
-           ASTNode *bin = create_node(NODE_BINARY_EXPR);
-           bin->value = strdup(op);
-           add_child(bin, left);
-           add_child(bin, right);
-           left = bin;  // New left side for next iteration
+           ASTNode *binary_expr = create_node(NODE_BINARY_EXPR);
+           binary_expr->value = strdup(operator_copy);
+           add_child(binary_expr, left_operand);
+           add_child(binary_expr, right_operand);
+           left_operand = binary_expr;  // New left side for next iteration
        }
-       return left;
+       
+       return left_operand;
    }
 
 **Algorithm:**
@@ -241,9 +253,9 @@ Parses primary expressions (terminals and unary operations).
    static ASTNode* parse_bitwise_not(FILE *input);
    static ASTNode* parse_unary_minus(FILE *input);
    static ASTNode* parse_parenthesized_expr(FILE *input);
-   static ASTNode* parse_field_access(FILE *input, const char *base_identifier);
-   static ASTNode* parse_array_index(FILE *input, const char *base_name);
-   static void validate_array_bounds(const char *array_name, const char *index_str);
+   static void parse_field_access(FILE *input, char *identifier_buffer, size_t buffer_size);
+   static void parse_array_index(FILE *input, char *index_buffer, size_t buffer_size);
+   static void validate_array_bounds(const char *identifier_name, const char *index_expr);
    static ASTNode* parse_identifier(FILE *input);
    static ASTNode* parse_number(FILE *input);
 
@@ -298,6 +310,10 @@ Parses primary expressions (terminals and unary operations).
    static ASTNode* parse_logical_not(FILE *input) {
        advance(input);  // consume '!'
        ASTNode *operand = parse_primary(input);
+       if (!operand) {
+           return NULL;
+       }
+       
        ASTNode *not_node = create_node(NODE_BINARY_OP);
        not_node->value = strdup("!");
        add_child(not_node, operand);
@@ -305,20 +321,18 @@ Parses primary expressions (terminals and unary operations).
    }
    
    // Array bounds validation
-   static void validate_array_bounds(const char *array_name, const char *index_str) {
-       if (!is_number_str(index_str)) {
+   static void validate_array_bounds(const char *identifier_name, const char *index_expr) {
+       if (!is_number_str(index_expr)) {
            return;  // Dynamic index, cannot validate at parse time
        }
        
-       int index_value = atoi(index_str);
-       int array_size = find_array_size(array_name);
+       int index_value = atoi(index_expr);
+       int array_size = find_array_size(identifier_name);
        
-       if (array_size > 0) {
-           if (index_value < 0 || index_value >= array_size) {
-               printf("Error (line %d): Array index %d out of bounds for '%s' (size %d)\n",
-                      current_token.line, index_value, array_name, array_size);
-               exit(EXIT_FAILURE);
-           }
+       if (array_size > 0 && (index_value < 0 || index_value >= array_size)) {
+           printf("Error (line %d): Array index %d out of bounds for '%s' with size %d\n",
+                  current_token.line, index_value, identifier_name, array_size);
+           exit(EXIT_FAILURE);
        }
    }
 
@@ -346,11 +360,13 @@ Parses individual statements and returns a ``NODE_STATEMENT`` AST node containin
 
    static ASTNode* parse_initializer_list(FILE *input, int is_array);
    static ASTNode* parse_variable_declaration(FILE *input, Token type_token);
-   static ASTNode* parse_lhs_expression(FILE *input, Token lhs_token, 
-                                        char *lhs_buffer, size_t buffer_size);
+   static void parse_lhs_expression(FILE *input, Token lhs_token, 
+                                     char *lhs_buf, size_t lhs_buf_size,
+                                     char *idx_buf, size_t idx_buf_size, 
+                                     char *base_name, size_t base_name_size);
    static ASTNode* parse_assignment_or_expression(FILE *input);
    static ASTNode* parse_return_statement(FILE *input);
-   static ASTNode* parse_else_blocks(FILE *input, ASTNode *if_node);
+   static void parse_else_blocks(FILE *input, ASTNode *if_node);
    static ASTNode* parse_if_statement(FILE *input);
    static ASTNode* parse_while_statement(FILE *input);
    static ASTNode* parse_for_init(FILE *input);
@@ -422,83 +438,100 @@ Parses individual statements and returns a ``NODE_STATEMENT`` AST node containin
 Variable Declarations
 ~~~~~~~~~~~~~~~~~~~~~
 
-Variable declarations are recognized when the current token is a type keyword (``int``, ``float``, ``char``, ``double``, ``struct``):
+Variable declarations are handled by the ``parse_variable_declaration()`` helper function:
 
 .. code-block:: c
 
-   if (match(TOKEN_KEYWORD) && (
-       strcmp(current_token.value, "int") == 0 ||
-       strcmp(current_token.value, "float") == 0 ||
-       strcmp(current_token.value, "char") == 0 ||
-       strcmp(current_token.value, "double") == 0 ||
-       strcmp(current_token.value, "struct") == 0)) {
+   static ASTNode* parse_variable_declaration(FILE *input, Token type_token) {
+       Token name_token = {0};
+       ASTNode *var_decl_node = NULL;
+       ASTNode *init_expr = NULL;
+       ASTNode *init_list = NULL;
+       int is_struct = 0;
+       int is_array = 0;
+       char arr_size_buf[ARRAY_SIZE_BUFFER_SIZE] = {0};
+       char buf[GENERAL_BUFFER_SIZE] = {0};
        
-       type_token = current_token;
-       advance(input);
-       
-       // Handle "struct Name" type
+       // Check if it's a struct type
        if (strcmp(type_token.value, "struct") == 0) {
-           type_token = current_token;  // Struct name becomes the type
+           if (!match(TOKEN_IDENTIFIER)) {
+               printf("Error (line %d): Expected struct name after 'struct'\n", 
+                      current_token.line);
+               exit(EXIT_FAILURE);
+           }
+           type_token = current_token;
            advance(input);
+           is_struct = 1;
        }
        
        // Get variable name
+       if (!match(TOKEN_IDENTIFIER)) {
+           printf("Error (line %d): Expected variable name after type\n", 
+                  current_token.line);
+           exit(EXIT_FAILURE);
+       }
+       
        name_token = current_token;
        advance(input);
        
-       // Create variable declaration node
        var_decl_node = create_node(NODE_VAR_DECL);
        var_decl_node->token = type_token;
        var_decl_node->value = strdup(name_token.value);
        
-       // Handle array declaration: int arr[SIZE];
+       // Handle array declaration
        if (match(TOKEN_BRACKET_OPEN)) {
+           is_array = 1;
            advance(input);
-           if (match(TOKEN_NUMBER)) {
-               char buf[256];
-               snprintf(buf, sizeof(buf), "%s[%s]", name_token.value, current_token.value);
-               free(var_decl_node->value);
-               var_decl_node->value = strdup(buf);
-               register_array(name_token.value, atoi(current_token.value));
-               advance(input);
+           
+           if (!match(TOKEN_NUMBER)) {
+               printf("Error (line %d): Expected array size after '['\n", 
+                      current_token.line);
+               exit(EXIT_FAILURE);
            }
-           consume(input, TOKEN_BRACKET_CLOSE);
+           
+           snprintf(arr_size_buf, sizeof(arr_size_buf), "%s", current_token.value);
+           snprintf(buf, sizeof(buf), "%s[%s]", name_token.value, current_token.value);
+           free(var_decl_node->value);
+           var_decl_node->value = strdup(buf);
+           advance(input);
+           
+           register_array(name_token.value, atoi(arr_size_buf));
+           
+           if (!consume(input, TOKEN_BRACKET_CLOSE)) {
+               printf("Error (line %d): Expected ']' after array size\n", 
+                      current_token.line);
+               exit(EXIT_FAILURE);
+           }
        }
        
-       // Handle initialization: int x = 42;
+       // Handle initialization
        if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
            advance(input);
            
            if (is_array && match(TOKEN_BRACE_OPEN)) {
-               // Array initializer: int arr[3] = {1, 2, 3};
-               advance(input);
-               init_list = create_node(NODE_EXPRESSION);
-               init_list->value = strdup("array_init");
-               while (!match(TOKEN_BRACE_CLOSE)) {
-                   if (match(TOKEN_NUMBER) || match(TOKEN_IDENTIFIER)) {
-                       elem = create_node(NODE_EXPRESSION);
-                       elem->value = strdup(current_token.value);
-                       add_child(init_list, elem);
-                       advance(input);
-                   } else if (match(TOKEN_COMMA)) {
-                       advance(input);
-                   }
-               }
-               consume(input, TOKEN_BRACE_CLOSE);
+               init_list = parse_initializer_list(input, 1);
                add_child(var_decl_node, init_list);
            } else if (is_struct && match(TOKEN_BRACE_OPEN)) {
-               // Struct initializer: struct Foo f = {1, 2};
-               // (same logic as array initializer)
+               init_list = parse_initializer_list(input, 0);
+               add_child(var_decl_node, init_list);
            } else {
-               // Scalar initializer: int x = 42;
                init_expr = parse_expression(input);
-               add_child(var_decl_node, init_expr);
+               if (init_expr) {
+                   add_child(var_decl_node, init_expr);
+               }
+               while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
+                   advance(input);
+               }
            }
        }
        
-       consume(input, TOKEN_SEMICOLON);
-       add_child(stmt_node, var_decl_node);
-       return stmt_node;
+       if (!consume(input, TOKEN_SEMICOLON)) {
+           printf("Error (line %d): Expected ';' after variable declaration\n", 
+                  current_token.line);
+           exit(EXIT_FAILURE);
+       }
+       
+       return var_decl_node;
    }
 
 **Array registration:**
@@ -508,259 +541,195 @@ When an array declaration is parsed, ``register_array()`` is called to record th
 Assignments
 ~~~~~~~~~~~
 
-Assignments are recognized when an identifier is followed by ``=``:
+Assignments are handled by the ``parse_assignment_or_expression()`` helper function, which delegates left-hand side parsing to ``parse_lhs_expression()``:
 
 .. code-block:: c
 
-   if (match(TOKEN_IDENTIFIER)) {
-       lhs_token = current_token;
+   static ASTNode* parse_assignment_or_expression(FILE *input) {
+       Token lhs_token = current_token;
+       ASTNode *assign_node = NULL;
+       ASTNode *lhs_expr = NULL;
+       ASTNode *rhs_node = NULL;
+       char lhs_buf[LHS_BUFFER_SIZE] = {0};
+       char idx_buf[INDEX_BUFFER_SIZE] = {0};
+       char base_name[BASE_NAME_BUFFER_SIZE] = {0};
+       
        advance(input);
        
-       char lhs_buf[1024] = {0};
-       strcpy(lhs_buf, lhs_token.value);
+       parse_lhs_expression(input, lhs_token, lhs_buf, sizeof(lhs_buf),
+                           idx_buf, sizeof(idx_buf), base_name, sizeof(base_name));
        
-       // Handle field access: foo.bar = expr;
-       while (match(TOKEN_OPERATOR) && strcmp(current_token.value, ".") == 0) {
-           advance(input);
-           if (!match(TOKEN_IDENTIFIER)) {
-               printf("Error: Expected field name after '.'\n");
-               exit(EXIT_FAILURE);
-           }
-           strcat(lhs_buf, "__");
-           strcat(lhs_buf, current_token.value);
-           advance(input);
-       }
+       lhs_expr = create_node(NODE_EXPRESSION);
+       lhs_expr->value = strdup(lhs_buf);
        
-       // Handle array subscript: arr[i] = expr;
-       if (match(TOKEN_BRACKET_OPEN)) {
-           advance(input);
-           char idx_buf[512] = {0};
-           // Collect index expression
-           while (!match(TOKEN_BRACKET_CLOSE)) {
-               strcat(idx_buf, current_token.value);
-               advance(input);
-           }
-           consume(input, TOKEN_BRACKET_CLOSE);
-           strcat(lhs_buf, "[");
-           strcat(lhs_buf, idx_buf);
-           strcat(lhs_buf, "]");
-           
-           // Bounds check if constant index
-           if (is_number_str(idx_buf)) {
-               int idx = atoi(idx_buf);
-               int arr_size = find_array_size(base_name);
-               if (arr_size > 0 && (idx < 0 || idx >= arr_size)) {
-                   printf("Error: Array index out of bounds\n");
-                   exit(EXIT_FAILURE);
-               }
-           }
-       }
-       
-       // Check for assignment operator
        if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
            advance(input);
-           
            assign_node = create_node(NODE_ASSIGNMENT);
-           lhs_expr = create_node(NODE_EXPRESSION);
-           lhs_expr->value = strdup(lhs_buf);
            add_child(assign_node, lhs_expr);
            
            rhs_node = parse_expression(input);
-           add_child(assign_node, rhs_node);
+           if (rhs_node) {
+               add_child(assign_node, rhs_node);
+           }
            
-           consume(input, TOKEN_SEMICOLON);
-           add_child(stmt_node, assign_node);
-           return stmt_node;
+           if (!consume(input, TOKEN_SEMICOLON)) {
+               printf("Error (line %d): Expected ';' after assignment\n", 
+                      current_token.line);
+               exit(EXIT_FAILURE);
+           }
+           
+           return assign_node;
+       } else {
+           // Not an assignment, skip to semicolon
+           while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
+               advance(input);
+           }
+           if (match(TOKEN_SEMICOLON)) {
+               advance(input);
+           }
+           free_node(lhs_expr);
+           return NULL;
        }
    }
+
+The ``parse_lhs_expression()`` helper handles field access (``foo.bar`` → ``foo__bar``) and array indexing (``arr[i]``) with bounds validation for constant indices.
 
 Control Flow Statements
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-**If statements:**
+The parser handles if, while, and for statements through dedicated helper functions.
+
+**If Statements**
+
+``parse_if_statement()`` handles if/else-if/else chains:
 
 .. code-block:: c
 
-   if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "if") == 0) {
+   static ASTNode* parse_if_statement(FILE *input) {
        advance(input);
-       consume(input, TOKEN_PARENTHESIS_OPEN);
-       cond_expr = parse_expression(input);
-       consume(input, TOKEN_PARENTHESIS_CLOSE);
-       consume(input, TOKEN_BRACE_OPEN);
        
-       if_node = create_node(NODE_IF_STATEMENT);
-       add_child(if_node, cond_expr);  // Condition is first child
-       
-       // Parse if body
-       while (!match(TOKEN_BRACE_CLOSE)) {
-           inner_stmt = parse_statement(input);
-           add_child(if_node, inner_stmt);
+       if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+           printf("Error: Expected '(' after 'if'\n");
+           exit(EXIT_FAILURE);
        }
-       consume(input, TOKEN_BRACE_CLOSE);
        
-       // Handle else if / else
-       while (match(TOKEN_KEYWORD) && strcmp(current_token.value, "else") == 0) {
-           advance(input);
-           if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "if") == 0) {
-               // else if
-               advance(input);
-               consume(input, TOKEN_PARENTHESIS_OPEN);
-               elseif_cond = parse_expression(input);
-               consume(input, TOKEN_PARENTHESIS_CLOSE);
-               consume(input, TOKEN_BRACE_OPEN);
-               
-               elseif_node = create_node(NODE_ELSE_IF_STATEMENT);
-               add_child(elseif_node, elseif_cond);
-               while (!match(TOKEN_BRACE_CLOSE)) {
-                   inner_stmt = parse_statement(input);
-                   add_child(elseif_node, inner_stmt);
-               }
-               consume(input, TOKEN_BRACE_CLOSE);
-               add_child(if_node, elseif_node);
-           } else {
-               // else
-               consume(input, TOKEN_BRACE_OPEN);
-               else_node = create_node(NODE_ELSE_STATEMENT);
-               while (!match(TOKEN_BRACE_CLOSE)) {
-                   inner_stmt = parse_statement(input);
-                   add_child(else_node, inner_stmt);
-               }
-               consume(input, TOKEN_BRACE_CLOSE);
-               add_child(if_node, else_node);
-               break;  // else must be last
+       ASTNode *cond_expr = parse_expression(input);
+       
+       if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+           printf("Error: Expected ')' after if condition\n");
+           exit(EXIT_FAILURE);
+       }
+       if (!consume(input, TOKEN_BRACE_OPEN)) {
+           printf("Error: Expected '{' after if condition\n");
+           exit(EXIT_FAILURE);
+       }
+       
+       ASTNode *if_node = create_node(NODE_IF_STATEMENT);
+       if (cond_expr) {
+           add_child(if_node, cond_expr);
+       }
+       
+       while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+           ASTNode *inner_stmt = parse_statement(input);
+           if (inner_stmt) {
+               add_child(if_node, inner_stmt);
            }
        }
        
-       add_child(stmt_node, if_node);
-       return stmt_node;
+       consume(input, TOKEN_BRACE_CLOSE);
+       parse_else_blocks(input, if_node);  // Handles else-if and else
+       
+       return if_node;
    }
 
-**AST structure for if/else if/else:**
+The ``parse_else_blocks()`` helper handles chained else-if and final else blocks.
 
-.. code-block:: text
+**While Statements**
 
-   NODE_IF_STATEMENT
-     ├─ condition_expr (child 0)
-     ├─ if_body_stmt (child 1)
-     ├─ if_body_stmt (child 2)
-     ├─ NODE_ELSE_IF_STATEMENT (child 3)
-     │    ├─ elseif_condition_expr
-     │    └─ elseif_body_stmts...
-     └─ NODE_ELSE_STATEMENT (child 4)
-          └─ else_body_stmts...
-
-**While loops:**
+``parse_while_statement()`` handles loop syntax and tracks nesting depth:
 
 .. code-block:: c
 
-   if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "while") == 0) {
+   static ASTNode* parse_while_statement(FILE *input) {
        advance(input);
+       
        consume(input, TOKEN_PARENTHESIS_OPEN);
-       cond_expr = parse_expression(input);
+       ASTNode *cond_expr = parse_expression(input);
        consume(input, TOKEN_PARENTHESIS_CLOSE);
        consume(input, TOKEN_BRACE_OPEN);
        
-       while_node = create_node(NODE_WHILE_STATEMENT);
-       add_child(while_node, cond_expr);
+       ASTNode *while_node = create_node(NODE_WHILE_STATEMENT);
+       if (cond_expr) {
+           add_child(while_node, cond_expr);
+       }
        
        s_loop_depth++;  // Track loop nesting for break/continue validation
-       while (!match(TOKEN_BRACE_CLOSE)) {
-           inner_stmt = parse_statement(input);
-           add_child(while_node, inner_stmt);
+       while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+           ASTNode *inner_stmt = parse_statement(input);
+           if (inner_stmt) {
+               add_child(while_node, inner_stmt);
+           }
        }
        s_loop_depth--;
        
        consume(input, TOKEN_BRACE_CLOSE);
-       add_child(stmt_node, while_node);
-       return stmt_node;
+       return while_node;
    }
 
-**For loops:**
+**For Statements**
 
-For loops support both variable declarations and assignments in the initialization clause:
+``parse_for_statement()`` handles initialization, condition, and increment:
 
 .. code-block:: c
 
-   if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "for") == 0) {
+   static ASTNode* parse_for_statement(FILE *input) {
        advance(input);
        consume(input, TOKEN_PARENTHESIS_OPEN);
        
-       // Parse initialization (int i = 0 or i = 0)
-       if (!match(TOKEN_SEMICOLON)) {
-           if (match(TOKEN_KEYWORD)) {
-               // Variable declaration: for (int i = 0; ...)
-               init_stmt = parse_statement(input);
-               init_node = init_stmt->children[0];
-           } else if (match(TOKEN_IDENTIFIER)) {
-               // Assignment: for (i = 0; ...)
-               // ... build assignment node
-           }
+       // Parse initialization (var decl or assignment)
+       ASTNode *init_node = parse_for_init(input);
+       if (match(TOKEN_SEMICOLON)) {
+           advance(input);
        }
-       if (match(TOKEN_SEMICOLON)) advance(input);
        
        // Parse condition
+       ASTNode *cond_expr = NULL;
        if (!match(TOKEN_SEMICOLON)) {
            cond_expr = parse_expression(input);
        }
        consume(input, TOKEN_SEMICOLON);
        
-       // Parse increment (i++, i--, i = i + 1)
-       if (!match(TOKEN_PARENTHESIS_CLOSE)) {
-           if (match(TOKEN_IDENTIFIER)) {
-               inc_lhs = current_token;
-               advance(input);
-               if (match(TOKEN_OPERATOR) && 
-                   (strcmp(current_token.value, "++") == 0 || 
-                    strcmp(current_token.value, "--") == 0)) {
-                   // i++ or i--: convert to i = i + 1 or i = i - 1
-                   incr_expr = create_node(NODE_ASSIGNMENT);
-                   lhs = create_node(NODE_EXPRESSION);
-                   lhs->value = strdup(inc_lhs.value);
-                   add_child(incr_expr, lhs);
-                   
-                   rhs = create_node(NODE_BINARY_EXPR);
-                   rhs->value = strdup(strcmp(current_token.value, "++") == 0 ? "+" : "-");
-                   op_l = create_node(NODE_EXPRESSION);
-                   op_l->value = strdup(inc_lhs.value);
-                   op_r = create_node(NODE_EXPRESSION);
-                   op_r->value = strdup("1");
-                   add_child(rhs, op_l);
-                   add_child(rhs, op_r);
-                   add_child(incr_expr, rhs);
-                   advance(input);
-               }
-           }
-       }
+       // Parse increment (i++, i--, i = i + 1, etc.)
+       ASTNode *incr_expr = parse_for_increment(input);
        consume(input, TOKEN_PARENTHESIS_CLOSE);
        consume(input, TOKEN_BRACE_OPEN);
        
-       // Build for loop node
-       for_node = create_node(NODE_FOR_STATEMENT);
+       ASTNode *for_node = create_node(NODE_FOR_STATEMENT);
        if (init_node) add_child(for_node, init_node);
        if (cond_expr) {
            add_child(for_node, cond_expr);
        } else {
-           // No condition means infinite loop (condition = true)
-           true_expr = create_node(NODE_EXPRESSION);
+           // No condition means infinite loop: for(;;)
+           ASTNode *true_expr = create_node(NODE_EXPRESSION);
            true_expr->value = strdup("1");
            add_child(for_node, true_expr);
        }
-       
-       // Parse body
-       s_loop_depth++;
-       while (!match(TOKEN_BRACE_CLOSE)) {
-           inner = parse_statement(input);
-           add_child(for_node, inner);
-       }
-       s_loop_depth--;
-       consume(input, TOKEN_BRACE_CLOSE);
-       
-       // Add increment at the end
        if (incr_expr) add_child(for_node, incr_expr);
        
-       add_child(stmt_node, for_node);
-       return stmt_node;
+       s_loop_depth++;
+       while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+           ASTNode *inner = parse_statement(input);
+           if (inner) {
+               add_child(for_node, inner);
+           }
+       }
+       s_loop_depth--;
+       
+       consume(input, TOKEN_BRACE_CLOSE);
+       return for_node;
    }
+
+The ``parse_for_init()`` helper handles both variable declarations (``int i = 0``) and assignments (``i = 0``). The ``parse_for_increment()`` helper supports ``i++``, ``i--``, and ``i = expr`` forms.
 
 **For loop AST structure:**
 
@@ -858,64 +827,65 @@ Parses a complete function declaration including parameters and body.
 
 .. code-block:: c
 
-   static ASTNode* parse_single_parameter(FILE *input);
-   static void parse_function_parameters(FILE *input, ASTNode *func_node);
-   static void parse_function_body(FILE *input, ASTNode *func_node);
+   static ASTNode* parse_single_parameter(FILE *input, Token *parameter_type);
+   static void parse_function_parameters(FILE *input, ASTNode *function_node);
+   static void parse_function_body(FILE *input, ASTNode *function_node);
 
 **Implementation:**
 
 .. code-block:: c
 
    ASTNode* parse_function(FILE *input, Token return_type, Token function_name) {
-       if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
-           printf("Error: Expected '(' after function name\n");
-           exit(EXIT_FAILURE);
-       }
+       // Initialize function node
+       ASTNode *function_node = create_node(NODE_FUNCTION_DECL);
+       function_node->token = return_type;
+       function_node->value = strdup(function_name.value);
        
-       ASTNode *func_node = create_node(NODE_FUNCTION);
-       func_node->token = return_type;
-       func_node->value = strdup(function_name.value);
+       // Reset global array count for this function scope
+       g_array_count = 0;
        
-       // Parse parameters
-       parse_function_parameters(input, func_node);
-       
-       if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
-           printf("Error: Expected ')' after parameters\n");
-           exit(EXIT_FAILURE);
-       }
-       
-       if (!consume(input, TOKEN_BRACE_OPEN)) {
-           printf("Error: Expected '{' after function signature\n");
-           exit(EXIT_FAILURE);
-       }
+       // Parse function parameters
+       parse_function_parameters(input, function_node);
        
        // Parse function body
-       parse_function_body(input, func_node);
+       parse_function_body(input, function_node);
        
-       if (!consume(input, TOKEN_BRACE_CLOSE)) {
-           printf("Error: Expected '}' after function body\n");
-           exit(EXIT_FAILURE);
-       }
-       
-       return func_node;
+       return function_node;
    }
 
 **Parameter Parsing:**
 
 .. code-block:: c
 
-   static void parse_function_parameters(FILE *input, ASTNode *func_node) {
+   static void parse_function_parameters(FILE *input, ASTNode *function_node) {
+       if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+           printf("Error: Expected '(' after function name\n");
+           exit(EXIT_FAILURE);
+       }
+       
        while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF)) {
-           ASTNode *parameter_node = parse_single_parameter(input);
-           if (parameter_node) {
-               add_child(func_node, parameter_node);
-           }
-           
-           if (match(TOKEN_COMMA)) {
+           if (match(TOKEN_KEYWORD)) {
+               Token parameter_type;
+               ASTNode *parameter_node = parse_single_parameter(input, &parameter_type);
+               if (parameter_node) {
+                   add_child(function_node, parameter_node);
+               }
+               
+               if (match(TOKEN_COMMA)) {
+                   advance(input);
+               }
+           } else {
                advance(input);
            }
        }
+       
+       if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+           printf("Error: Expected ')' after parameter list\n");
+           exit(EXIT_FAILURE);
+       }
    }
+
+The ``parse_single_parameter()`` helper handles both primitive types (``int x``) and struct types (``struct Point p``).
 
 Struct Parsing
 --------------

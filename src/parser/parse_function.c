@@ -15,11 +15,6 @@ extern Token current_token;
 extern ArrayInfo g_arrays[MAX_ARRAYS];
 extern int g_array_count;
 
-// Forward declarations
-static void parse_function_parameters(FILE *input, ASTNode *function_node);
-static void parse_function_body(FILE *input, ASTNode *function_node);
-
-// Forward declarations
 static void parse_function_parameters(FILE *input, ASTNode *function_node);
 static void parse_function_body(FILE *input, ASTNode *function_node);
 
