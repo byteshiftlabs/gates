@@ -41,6 +41,7 @@ static void gen_continue(ASTNode *node, FILE *out);
 static void gen_binary_expr(ASTNode *node, FILE *out);
 static void gen_expression(ASTNode *node, FILE *out);
 static void gen_unary_op(ASTNode *node, FILE *out);
+static void gen_func_call(ASTNode *node, FILE *out);
 
 static int  is_bool_comparison(const char *op);
 static int  node_is_boolean(ASTNode *node);
@@ -81,6 +82,7 @@ static void gen_node(ASTNode *node, FILE *out)
         case NODE_BINARY_EXPR:      gen_binary_expr(node, out); break;
         case NODE_BINARY_OP:        gen_unary_op(node, out); break; // unary ops live in BINARY_OP nodes in original parser
         case NODE_EXPRESSION:       gen_expression(node, out); break;
+        case NODE_FUNC_CALL:        gen_func_call(node, out); break;
         default: /* intentionally ignored */ break;
     }
 }
@@ -814,6 +816,51 @@ static void emit_struct_return_copy(ASTNode *expr, ASTNode *function_decl, FILE 
                 expr->value,
                 g_structs[sidx].fields[field_index].field_name);
     }
+}
+
+// -------------------------------------------------------------
+// Function call generation
+// -------------------------------------------------------------
+
+/**
+ * Generates VHDL code for a function call expression.
+ * 
+ * Current implementation: Emits the function call as-is in VHDL syntax.
+ * This works for simple expressions but doesn't handle:
+ * - Component instantiation for called functions
+ * - Signal routing for return values
+ * - Multi-cycle function execution
+ * 
+ * Future enhancement: Generate proper component instantiation with
+ * unique instance names and signal wiring.
+ * 
+ * @param node Function call AST node (NODE_FUNC_CALL)
+ * @param out  Output file stream for VHDL code
+ */
+static void gen_func_call(ASTNode *node, FILE *out)
+{
+    int arg_index = 0;
+    
+    if (!node || !node->value)
+    {
+        fprintf(out, "-- Error: unknown function call");
+        return;
+    }
+    
+    // Emit function name
+    fprintf(out, "%s(", node->value);
+    
+    // Emit comma-separated arguments
+    for (arg_index = 0; arg_index < node->num_children; arg_index++)
+    {
+        if (arg_index > 0)
+        {
+            fprintf(out, ", ");
+        }
+        gen_node(node->children[arg_index], out);
+    }
+    
+    fprintf(out, ")");
 }
 
 // -------------------------------------------------------------
