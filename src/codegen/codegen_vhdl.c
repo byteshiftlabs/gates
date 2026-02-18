@@ -380,12 +380,14 @@ static void gen_if(ASTNode *node, FILE *out)
 }
 
 // -------------------------------------------------------------
-static void gen_break(ASTNode *node, FILE *out){
+static void gen_break(ASTNode *node, FILE *out)
+{
     (void)node;
     fprintf(out, "      exit;\n");
 }
 
-static void gen_continue(ASTNode *node, FILE *out){
+static void gen_continue(ASTNode *node, FILE *out)
+{
     (void)node;
     fprintf(out, "      next;\n");
 }
