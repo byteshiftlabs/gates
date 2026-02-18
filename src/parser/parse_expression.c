@@ -12,7 +12,7 @@
 #define IDENTIFIER_BUFFER_SIZE 128
 #define NEGATED_VALUE_BUFFER_SIZE 128
 #define INDEX_EXPRESSION_BUFFER_SIZE 512
-// Full expression = identifier[index] + brackets + null terminator
+// Full expression buffer = identifier + '[' + index + ']' + '\0'
 #define FULL_EXPRESSION_BUFFER_SIZE (IDENTIFIER_BUFFER_SIZE + INDEX_EXPRESSION_BUFFER_SIZE + 3)
 #define OPERATOR_COPY_BUFFER_SIZE 8
 
