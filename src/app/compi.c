@@ -6,7 +6,8 @@
 #include "codegen_vhdl.h"
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
     FILE *fin = NULL;
     FILE *fout = NULL;

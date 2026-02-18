@@ -16,84 +16,120 @@
 // Current token shared by parsing modules
 extern Token current_token;
 
-// Parse the entire program: delegates to specialized modules
-ASTNode* parse_program(FILE *input) {
-    Token func_name = (Token){0};
-    Token return_type = (Token){0};
-    Token struct_name_tok = (Token){0};
-    ASTNode *func_node = NULL;
-    ASTNode *program_node = NULL;
-    ASTNode *s = NULL;
+// Forward declarations
+static ASTNode* parse_struct_declaration(FILE *input, ASTNode *program_node);
+static ASTNode* parse_function_declaration(FILE *input, Token return_type, ASTNode *program_node);
+static void skip_to_semicolon(FILE *input);
 
-    program_node = create_node(NODE_PROGRAM);
+// Skip tokens until we find a semicolon or EOF
+static void skip_to_semicolon(FILE *input)
+{
+    while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
+        advance(input);
+    }
+    if (match(TOKEN_SEMICOLON)) {
+        advance(input);
+    }
+}
+
+// Parse struct declaration or function returning struct
+static ASTNode* parse_struct_declaration(FILE *input, ASTNode *program_node)
+{
+    advance(input); // consume 'struct'
+    
+    if (!match(TOKEN_IDENTIFIER)) {
+        printf("Warning: 'struct' without name at line %d\n", current_token.line);
+        return NULL;
+    }
+    
+    Token struct_name_token = current_token;
+    advance(input);
+    
+    // struct definition: struct Name { ... };
+    if (match(TOKEN_BRACE_OPEN)) {
+        ASTNode *struct_node = parse_struct(input, struct_name_token);
+        if (struct_node) {
+            add_child(program_node, struct_node);
+        }
+        return struct_node;
+    }
+    
+    // Function returning struct: struct Name funcname(...) { ... }
+    if (match(TOKEN_IDENTIFIER)) {
+        Token function_name = current_token;
+        advance(input);
+        
+        if (match(TOKEN_PARENTHESIS_OPEN)) {
+            ASTNode *function_node = parse_function(input, struct_name_token, function_name);
+            if (function_node) {
+                add_child(program_node, function_node);
+            }
+            return function_node;
+        } else {
+            printf("Warning: Expected '(' after function name for struct return function '%s'\n", 
+                   function_name.value);
+        }
+    } else {
+        printf("Warning: 'struct %s' not followed by function name or '{'\n", 
+               struct_name_token.value);
+    }
+    
+    return NULL;
+}
+
+// Parse function declaration with primitive return type
+static ASTNode* parse_function_declaration(FILE *input, Token return_type, ASTNode *program_node)
+{
+    if (!match(TOKEN_IDENTIFIER)) {
+        printf("Warning: Expected identifier after type at line %d\n", current_token.line);
+        advance(input);
+        return NULL;
+    }
+    
+    Token function_name = current_token;
+    advance(input);
+    
+    if (match(TOKEN_PARENTHESIS_OPEN)) {
+        ASTNode *function_node = parse_function(input, return_type, function_name);
+        if (function_node) {
+            add_child(program_node, function_node);
+        }
+        return function_node;
+    } else {
+        printf("Warning: Global variable declarations not yet implemented\n");
+        skip_to_semicolon(input);
+        return NULL;
+    }
+}
+
+// Parse the entire program: delegates to specialized modules
+ASTNode* parse_program(FILE *input)
+{
+    ASTNode *program_node = create_node(NODE_PROGRAM);
 
     advance(input); // prime tokenizer
 
     while (!match(TOKEN_EOF)) {
         #ifdef DEBUG
-        printf("Parsing token: type=%d, value='%s'\n", current_token.type, current_token.value ? current_token.value : "");
+        printf("Parsing token: type=%d, value='%s'\n", 
+               current_token.type, 
+               current_token.value ? current_token.value : "");
         #endif
+        
         if (match(TOKEN_KEYWORD)) {
             if (strcmp(current_token.value, "struct") == 0) {
-                advance(input); // consume 'struct'
-                if (match(TOKEN_IDENTIFIER)) {
-                    struct_name_tok = current_token;
-                    advance(input);
-                    if (match(TOKEN_BRACE_OPEN)) { // struct definition
-                        s = parse_struct(input, struct_name_tok);
-                        if (s) {
-                            add_child(program_node, s);
-                        }
-                        continue;
-                    }
-                    if (match(TOKEN_IDENTIFIER)) { // function returning struct
-                        return_type = struct_name_tok;
-                        func_name = current_token;
-                        advance(input);
-                        if (match(TOKEN_PARENTHESIS_OPEN)) {
-                            func_node = parse_function(input, return_type, func_name);
-                            if (func_node) {
-                                add_child(program_node, func_node);
-                            }
-                            continue;
-                        } else {
-                            printf("Warning: Expected '(' after function name for struct return function '%s'\n", func_name.value);
-                        }
-                    } else {
-                        printf("Warning: 'struct %s' not followed by function name or '{'\n", struct_name_tok.value);
-                    }
-                } else {
-                    printf("Warning: 'struct' without name at line %d\n", current_token.line);
-                }
+                parse_struct_declaration(input, program_node);
                 continue;
             }
-            // primitive or known type function
-            return_type = current_token;
+            
+            // Primitive or known type function
+            Token return_type = current_token;
             advance(input);
-            if (match(TOKEN_IDENTIFIER)) {
-                func_name = current_token;
-                advance(input);
-                if (match(TOKEN_PARENTHESIS_OPEN)) {
-                    func_node = parse_function(input, return_type, func_name);
-                    if (func_node) {
-                        add_child(program_node, func_node);
-                    }
-                } else {
-                    printf("Warning: Global variable declarations not yet implemented\n");
-                    while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
-                        advance(input);
-                    }
-                    if (match(TOKEN_SEMICOLON)) {
-                        advance(input);
-                    }
-                }
-            } else {
-                printf("Warning: Expected identifier after type at line %d\n", current_token.line);
-                advance(input);
-            }
+            parse_function_declaration(input, return_type, program_node);
         } else {
             advance(input); // Skip unknown token
         }
     }
+    
     return program_node;
 }

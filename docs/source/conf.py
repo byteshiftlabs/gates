@@ -26,5 +26,29 @@ import sphinx_rtd_theme
 
 html_theme = "sphinx_rtd_theme"
 html_theme_options = {
-    "collapse_navigation": False,
+    'navigation_depth': 5,
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+    'includehidden': True,
+    'titles_only': False,
+    'style_nav_header_background': '#2980B9',  # Blue header
 }
+
+# Custom CSS for better code block styling
+html_static_path = ['_static']
+html_css_files = [
+    'custom.css',
+]
+
+# Show "Edit on GitHub" link
+html_context = {
+    'display_github': True,
+    'github_user': 'cmelnu',
+    'github_repo': 'compi',
+    'github_version': 'main',
+    'conf_py_path': '/docs/source/',
+}
+
+# Syntax highlighting
+pygments_style = 'monokai'  # Dark theme for code blocks
+

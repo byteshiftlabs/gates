@@ -1,90 +1,125 @@
 #include "utils.h"
 
-// Helper function to print tree branches for AST visualization
-void print_tree_prefix(int level, int is_last) {
+// Helper function to get operator precedence
+int get_precedence(const char *op)
+{
+    if (!op) {
+        return PREC_UNKNOWN;
+    }
+    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) {
+        return PREC_MULTIPLICATIVE;
+    }
+    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) {
+        return PREC_ADDITIVE;
+    }
+    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) {
+        return PREC_SHIFT;
+    }
+    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
+        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) {
+        return PREC_RELATIONAL;
+    }
+    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) {
+        return PREC_EQUALITY;
+    }
+    if (strcmp(op, "&") == 0) {
+        return PREC_BITWISE_AND;
+    }
+    if (strcmp(op, "^") == 0) {
+        return PREC_BITWISE_XOR;
+    }
+    if (strcmp(op, "|") == 0) {
+        return PREC_BITWISE_OR;
+    }
+    if (strcmp(op, "&&") == 0) {
+        return PREC_LOGICAL_AND;
+    }
+    if (strcmp(op, "||") == 0) {
+        return PREC_LOGICAL_OR;
+    }
+    return PREC_UNKNOWN;
+}
 
-    int i = 0;
+// Helper function to print tree branch decoration
+void print_tree_prefix(int level, int is_last)
+{
 
-    for (i = 0; i < level; i++) {
-        printf("%s", (i == level - 1) ? (is_last ? "└── " : "├── ") : "    ");
+    int level_idx = 0;
+
+    for (level_idx = 0; level_idx < level; level_idx++) {
+        printf("%s", (level_idx == level - 1) ? (is_last ? "└── " : "├── ") : "    ");
     }
 }
 
 
-int is_number_str(const char *s) {
+int is_number_str(const char *str)
+{
 
-    const char *p = NULL;
+    const char *str_ptr = NULL;
 
-    if (!s || !*s) return 0;
+    if (!str || !*str) {
+        return 0;
+    }
 
-    p = s;
+    str_ptr = str;
 
-    if (*p == '+' || *p == '-') p++;
-    if (!*p) return 0;
+    if (*str_ptr == '+' || *str_ptr == '-') {
+        str_ptr++;
+    }
+    if (!*str_ptr) {
+        return 0;
+    }
 
-    while (*p) {
-        if (!isdigit((unsigned char)*p)) return 0;
-        p++;
+    while (*str_ptr) {
+        if (!isdigit((unsigned char)*str_ptr)) {
+            return 0;
+        }
+        str_ptr++;
     }
 
     return 1;
 }
 
 // Add this helper function above generate_vhdl:
-int is_negative_literal(const char* value) {
+int is_negative_literal(const char* value)
+{
 
-    int i = 1;
-    int has_valid = 0;
+    int char_idx = 1;
+    int has_literal_chars = 0;
 
     if (!value || value[0] != '-' || strlen(value) < 2)
         return 0;
 
-    while (value[i]) {
-        if (isdigit(value[i]) || value[i] == '.' || isalpha(value[i]) || value[i] == '_') {
-            has_valid = 1;
+    while (value[char_idx]) {
+        if (isdigit(value[char_idx]) || value[char_idx] == '.' || isalpha(value[char_idx]) || value[char_idx] == '_') {
+            has_literal_chars = 1;
         } else {
             return 0;
         }
-        i++;
+        char_idx++;
     }
 
-    return has_valid;
+    return has_literal_chars;
 }
-
-int get_precedence(const char *op) {
-
-    // Higher number = higher precedence (mirrors C precedence ordering)
-    if (!op) return -999;
-    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return 7;
-    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 6;
-    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) return 5;
-    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
-        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 4;
-    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 3;
-    if (strcmp(op, "&") == 0) return 2;
-    if (strcmp(op, "^") == 0) return 1;
-    if (strcmp(op, "|") == 0) return 0;
-    if (strcmp(op, "&&") == 0) return -1; // logical AND
-    if (strcmp(op, "||") == 0) return -2; // logical OR (lowest)
-    return -1000; // unknown
-}
-
 
 // Print the AST recursively in a readable tree format
-void print_ast(ASTNode* node, int level) {
+void print_ast(ASTNode* node, int level)
+{
 
     int is_last = 1;
-    int i = 0;
+    int child_idx = 0;
     ASTNode *parent = NULL;
 
-    if (!node) return;
+    if (!node) {
+        return;
+    }
 
     // Find if this node is the last child
     if (node->parent) {
         parent = node->parent;
-        for (i = 0; i < parent->num_children; i++) {
-            if (parent->children[i] == node) {
-                is_last = (i == parent->num_children - 1);
+        for (child_idx = 0; child_idx < parent->num_children; child_idx++) {
+            if (parent->children[child_idx] == node) {
+                is_last = (child_idx == parent->num_children - 1);
                 break;
             }
         }
@@ -145,13 +180,14 @@ void print_ast(ASTNode* node, int level) {
             break;
     }
 
-    for (i = 0; i < node->num_children; i++) {
-        print_ast(node->children[i], level + 1);
+    for (child_idx = 0; child_idx < node->num_children; child_idx++) {
+        print_ast(node->children[child_idx], level + 1);
     }
 }
 
 // Helper function to map C types to VHDL types
-char* ctype_to_vhdl(const char* ctype) {
+char* ctype_to_vhdl(const char* ctype)
+{
 
     // No local variables needed
     if (strcmp(ctype, "int") == 0) {
