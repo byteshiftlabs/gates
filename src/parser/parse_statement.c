@@ -276,39 +276,11 @@ static void parse_lhs_expression(FILE *input, Token lhs_token, char *lhs_buf, si
 static ASTNode* parse_standalone_function_call(FILE *input, const char *function_name)
 {
     ASTNode *func_call_node = NULL;
-    ASTNode *arg_node = NULL;
     
-    func_call_node = create_node(NODE_FUNC_CALL);
-    func_call_node->value = strdup(function_name);
+    // Use shared helper to parse function call arguments
+    func_call_node = parse_function_call_args(input, function_name);
     
-    advance(input); // consume '('
-    
-    // Parse zero or more comma-separated arguments
-    while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF))
-    {
-        arg_node = parse_expression(input);
-        if (arg_node)
-        {
-            add_child(func_call_node, arg_node);
-        }
-        
-        if (match(TOKEN_COMMA))
-        {
-            advance(input);
-            continue;
-        }
-        else
-        {
-            break;
-        }
-    }
-    
-    if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
-    {
-        printf("Error (line %d): Expected ')' after function call arguments\n", current_token.line);
-        exit(EXIT_FAILURE);
-    }
-    
+    // Expect semicolon after statement
     if (!consume(input, TOKEN_SEMICOLON))
     {
         printf("Error (line %d): Expected ';' after function call\n", current_token.line);
