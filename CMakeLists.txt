@@ -28,6 +28,7 @@ set(COMPI_ALL_SRC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/core/utils.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/symbols/symbol_structs.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/symbols/symbol_arrays.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/error_handler.c
 )
 
 # Separate main file to allow creating a reusable core library for tests
