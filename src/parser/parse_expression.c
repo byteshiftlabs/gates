@@ -211,7 +211,80 @@ static void validate_array_bounds(const char *identifier_name, const char *index
     }
 }
 
-// Helper: Parse identifier with optional field access and array indexing
+// Helper: Parse function call arguments
+/**
+ * Parses function call arguments (shared helper for expressions and statements).
+ * 
+ * Syntax: (arg1, arg2, ..., argN)
+ * 
+ * The opening parenthesis should already be matched before calling this function.
+ * This function consumes the opening parenthesis, parses comma-separated arguments,
+ * and expects a closing parenthesis.
+ * 
+ * @param input         Input file stream
+ * @param function_name Name of the function being called (for error messages)
+ * @return              NODE_FUNC_CALL node with arguments as children
+ */
+ASTNode* parse_function_call_args(FILE *input, const char *function_name)
+{
+    ASTNode *call_node = NULL;
+    ASTNode *arg_node = NULL;
+    
+    call_node = create_node(NODE_FUNC_CALL);
+    call_node->value = strdup(function_name);
+    
+    // Consume opening parenthesis
+    advance(input);
+    
+    // Parse zero or more comma-separated arguments
+    while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF))
+    {
+        arg_node = parse_expression_prec(input, PREC_TOP_LEVEL_MIN);
+        if (arg_node)
+        {
+            add_child(call_node, arg_node);
+        }
+        
+        if (match(TOKEN_COMMA))
+        {
+            advance(input);
+            continue;
+        }
+        else
+        {
+            break;
+        }
+    }
+    
+    if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
+    {
+        printf("Error (line %d): Expected ')' after function call arguments for '%s'\n",
+               current_token.line, function_name);
+        exit(EXIT_FAILURE);
+    }
+    
+    return call_node;
+}
+
+/**
+ * Parses a function call with its arguments.
+ * 
+ * Syntax: function_name(arg1, arg2, ..., argN)
+ * 
+ * The opening parenthesis should already be matched before calling this function.
+ * This function consumes the opening parenthesis, parses comma-separated arguments,
+ * and expects a closing parenthesis.
+ * 
+ * @param input         Input file stream
+ * @param function_name Name of the function being called
+ * @return              NODE_FUNC_CALL node with arguments as children
+ */
+static ASTNode* parse_function_call(FILE *input, const char *function_name)
+{
+    return parse_function_call_args(input, function_name);
+}
+
+// Helper: Parse identifier with optional field access, array indexing, or function call
 static ASTNode* parse_identifier(FILE *input)
 {
     ASTNode *identifier_node = NULL;
@@ -222,11 +295,18 @@ static ASTNode* parse_identifier(FILE *input)
     safe_copy(identifier_name, sizeof(identifier_name), current_token.value);
     advance(input);
     
+    // Check for function call: identifier(args)
+    if (match(TOKEN_PARENTHESIS_OPEN))
+    {
+        return parse_function_call(input, identifier_name);
+    }
+    
     // Handle field access (e.g., struct.field)
     parse_field_access(input, identifier_name, sizeof(identifier_name));
     
     // Handle array indexing
-    if (match(TOKEN_BRACKET_OPEN)) {
+    if (match(TOKEN_BRACKET_OPEN))
+    {
         parse_array_index(input, index_expression, sizeof(index_expression));
         
         identifier_node = create_node(NODE_EXPRESSION);

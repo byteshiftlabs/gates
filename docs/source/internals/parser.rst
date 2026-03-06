@@ -1024,6 +1024,255 @@ Array Bounds Validation
 * Looks up array size from symbol table (``find_array_size()``)
 * Reports error and exits if index is out of bounds
 
+Function Call Parsing
+----------------------
+
+The parser supports function calls in all expression contexts and as standalone statements.
+
+Overview
+~~~~~~~~
+
+Function calls are represented by ``NODE_FUNC_CALL`` nodes with:
+
+* ``value``: The function name (e.g., ``"add"``)
+* ``children``: Zero or more argument expressions
+
+**Supported contexts:**
+
+1. **Expression context**: ``z = add(x, y) + 3;``
+2. **Standalone statement**: ``printf(x);``
+3. **Return statement**: ``return add(a, b);``
+4. **Conditionals**: ``if (max(a, b) > 10)``
+5. **Loop conditions**: ``while (count() < 100)``
+6. **Nested calls**: ``add(mul(x, 2), mul(y, 3))``
+
+parse_function_call()
+~~~~~~~~~~~~~~~~~~~~~
+
+Parses function call in expression context:
+
+.. code-block:: c
+
+   static ASTNode* parse_function_call(FILE *input, const char *function_name)
+   {
+       ASTNode *call_node = NULL;
+       ASTNode *arg_node = NULL;
+       
+       call_node = create_node(NODE_FUNC_CALL);
+       call_node->value = strdup(function_name);
+       
+       advance(input);  // consume '('
+       
+       // Parse zero or more comma-separated arguments
+       while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF))
+       {
+           arg_node = parse_expression_prec(input, PREC_TOP_LEVEL_MIN);
+           if (arg_node)
+           {
+               add_child(call_node, arg_node);
+           }
+           
+           if (match(TOKEN_COMMA))
+           {
+               advance(input);
+               continue;
+           }
+           else
+           {
+               break;
+           }
+       }
+       
+       if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
+       {
+           printf("Error (line %d): Expected ')' after function call arguments for '%s'\n",
+                  current_token.line, function_name);
+           exit(EXIT_FAILURE);
+       }
+       
+       return call_node;
+   }
+
+**Process:**
+
+1. Create ``NODE_FUNC_CALL`` node with function name
+2. Consume opening parenthesis ``(``
+3. Parse comma-separated arguments as full expressions
+4. Each argument is added as a child to the call node
+5. Expect closing parenthesis ``)``
+
+**Integration with parse_identifier():**
+
+Function calls are detected in ``parse_identifier()`` when a ``TOKEN_PARENTHESIS_OPEN`` follows an identifier:
+
+.. code-block:: c
+
+   static ASTNode* parse_identifier(FILE *input)
+   {
+       char identifier_name[128] = {0};
+       strcpy(identifier_name, current_token.value);
+       advance(input);
+       
+       // Check for function call: identifier(args)
+       if (match(TOKEN_PARENTHESIS_OPEN))
+       {
+           return parse_function_call(input, identifier_name);
+       }
+       
+       // ...handle field access and array indexing...
+   }
+
+parse_standalone_function_call()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Parses function call as a statement (discards return value):
+
+.. code-block:: c
+
+   static ASTNode* parse_standalone_function_call(FILE *input, const char *function_name)
+   {
+       ASTNode *func_call_node = NULL;
+       ASTNode *arg_node = NULL;
+       
+       func_call_node = create_node(NODE_FUNC_CALL);
+       func_call_node->value = strdup(function_name);
+       
+       advance(input);  // consume '('
+       
+       // Parse zero or more comma-separated arguments
+       while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF))
+       {
+           arg_node = parse_expression(input);
+           if (arg_node)
+           {
+               add_child(func_call_node, arg_node);
+           }
+           
+           if (match(TOKEN_COMMA))
+           {
+               advance(input);
+               continue;
+           }
+           else
+           {
+               break;
+           }
+       }
+       
+       if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
+       {
+           printf("Error (line %d): Expected ')' after function call arguments\n", current_token.line);
+           exit(EXIT_FAILURE);
+       }
+       
+       if (!consume(input, TOKEN_SEMICOLON))
+       {
+           printf("Error (line %d): Expected ';' after function call\n", current_token.line);
+           exit(EXIT_FAILURE);
+       }
+       
+       return func_call_node;
+   }
+
+**Difference from expression context:**
+
+* Expects a semicolon after the closing parenthesis
+* Called from ``parse_assignment_or_expression()`` when identifier is followed by ``(``
+
+AST Examples
+~~~~~~~~~~~~
+
+**Simple call:**
+
+C code:
+
+.. code-block:: c
+
+   z = add(x, y);
+
+AST structure:
+
+.. code-block:: text
+
+   NODE_ASSIGNMENT
+     ├─ NODE_EXPRESSION (value = "z")
+     └─ NODE_FUNC_CALL (value = "add")
+          ├─ NODE_EXPRESSION (value = "x")
+          └─ NODE_EXPRESSION (value = "y")
+
+**Nested call:**
+
+C code:
+
+.. code-block:: c
+
+   return add(multiply(x, 2), multiply(y, 3));
+
+AST structure:
+
+.. code-block:: text
+
+   NODE_STATEMENT (token.value = "return")
+     └─ NODE_FUNC_CALL (value = "add")
+          ├─ NODE_FUNC_CALL (value = "multiply")
+          │    ├─ NODE_EXPRESSION (value = "x")
+          │    └─ NODE_EXPRESSION (value = "2")
+          └─ NODE_FUNC_CALL (value = "multiply")
+               ├─ NODE_EXPRESSION (value = "y")
+               └─ NODE_EXPRESSION (value = "3")
+
+**Call in condition:**
+
+C code:
+
+.. code-block:: c
+
+   if (add(a, b) > 10) {
+       return 1;
+   }
+
+AST structure:
+
+.. code-block:: text
+
+   NODE_IF_STATEMENT
+     ├─ NODE_BINARY_EXPR (value = ">")
+     │    ├─ NODE_FUNC_CALL (value = "add")
+     │    │    ├─ NODE_EXPRESSION (value = "a")
+     │    │    └─ NODE_EXPRESSION (value = "b")
+     │    └─ NODE_EXPRESSION (value = "10")
+     └─ NODE_STATEMENT (token.value = "return")
+          └─ NODE_EXPRESSION (value = "1")
+
+**Standalone call:**
+
+C code:
+
+.. code-block:: c
+
+   print_debug(x);
+
+AST structure:
+
+.. code-block:: text
+
+   NODE_FUNC_CALL (value = "print_debug")
+     └─ NODE_EXPRESSION (value = "x")
+
+Limitations
+~~~~~~~~~~~
+
+Current implementation:
+
+* ✅ Parses function calls correctly in all contexts
+* ✅ Handles zero or more arguments
+* ✅ Supports nested function calls
+* ✅ Works with complex argument expressions
+* ⚠️  VHDL generation emits calls as-is (no component instantiation yet)
+* ⚠️  No type checking on arguments
+* ⚠️  No validation that function exists
+* ⚠️  No recursion support in VHDL
+
 Statement Parsing
 -----------------
 
@@ -1822,26 +2071,6 @@ Limitations
 * Struct field access uses ``__`` separator (conflicts with identifiers containing ``__``)
 * Break/continue only work in loops (not in switches, which aren't supported)
 
-Performance Characteristics
-----------------------------
-
-**Time complexity:**
-
-* Overall: O(n) where n is number of tokens
-* Expression parsing: O(n) for n operators (precedence climbing is linear)
-* Statement parsing: O(n) for n statements (each parsed once)
-
-**Space complexity:**
-
-* AST size: O(n) nodes for n tokens
-* Parser stack depth: O(d) where d is maximum nesting depth
-* Fixed buffers: ~2-3 KB per parsing function call
-
-**Bottlenecks:**
-
-* String operations (``strdup``, ``strcmp``, ``snprintf``)
-* Fixed-size buffer copies (could use dynamic allocation)
-* Linear search in keyword table (could use hash table)
 
 Future Enhancements
 -------------------
