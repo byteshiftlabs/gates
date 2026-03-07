@@ -5,12 +5,6 @@ extern "C" {
 #include <sstream>
 #include <string>
 
-#include <gtest/gtest.h>
-extern "C" {
-    #include "error_handler.h"
-}
-#include <sstream>
-#include <string>
 #include <cstdio>
 #include <unistd.h>
 #include <fcntl.h>
