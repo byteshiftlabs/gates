@@ -1,7 +1,6 @@
 #ifndef ERROR_HANDLER_H
 #define ERROR_HANDLER_H
 
-#include "token.h"
 
 // Error severity levels
 typedef enum {
