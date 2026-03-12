@@ -1,6 +1,6 @@
-# Compi Roadmap
+# Gates Roadmap
 
-This document outlines the planned features, improvements, and milestones for Compi.
+This document outlines the planned features, improvements, and milestones for Gates.
 
 ---
 

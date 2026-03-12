@@ -15,18 +15,18 @@ extern "C" {
 // -------------------------------------------------------------
 // Buffer size constants (use config values)
 // -------------------------------------------------------------
-#define MAX_PARAMETERS COMPI_MAX_PARAMETERS
-#define MAX_BUFFER_SIZE COMPI_MAX_BUFFER_SIZE
-#define ARRAY_NAME_BUFFER_SIZE COMPI_ARRAY_NAME_BUFFER_SIZE
+#define MAX_PARAMETERS GATES_MAX_PARAMETERS
+#define MAX_BUFFER_SIZE GATES_MAX_BUFFER_SIZE
+#define ARRAY_NAME_BUFFER_SIZE GATES_ARRAY_NAME_BUFFER_SIZE
 #define ARRAY_INDEX_BUFFER_SIZE 64
 #define ARRAY_SIZE_BUFFER_SIZE 32
 // Bitstring buffer: VHDL_BIT_WIDTH binary digits + quotes + null + safety margin
-#define BITSTRING_BUFFER_SIZE (COMPI_VHDL_BIT_WIDTH + 8)
+#define BITSTRING_BUFFER_SIZE (GATES_VHDL_BIT_WIDTH + 8)
 
 // -------------------------------------------------------------
 // VHDL type constants (use config value)
 // -------------------------------------------------------------
-#define VHDL_BIT_WIDTH COMPI_VHDL_BIT_WIDTH
+#define VHDL_BIT_WIDTH GATES_VHDL_BIT_WIDTH
 
 // -------------------------------------------------------------
 // Array index constants
