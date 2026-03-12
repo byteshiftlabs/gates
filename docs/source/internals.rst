@@ -1,7 +1,7 @@
 Internals
 =========
 
-This section provides exhaustive documentation of the internal architecture, data structures, algorithms, and implementation details of the Compi C-to-VHDL compiler.
+This section provides exhaustive documentation of the internal architecture, data structures, algorithms, and implementation details of the Gates C-to-VHDL compiler.
 
 .. toctree::
    :maxdepth: 3
