@@ -4,72 +4,61 @@
 #include "parse_function.h"
 #include "parse_statement.h"
 #include "symbol_arrays.h"
-#include "parse.h" // create_node/add_child
-#include "token.h"
+#include "tokenizer.h"
+#include "error_handler.h"
+#include "utils.h"
 
 // Constants
-#define MAX_ARRAYS 128
-#define INITIAL_BRACE_DEPTH 1
-
-extern Token current_token;
-extern ArrayInfo g_arrays[MAX_ARRAYS];
-extern int g_array_count;
-
-static void parse_function_parameters(FILE *input, ASTNode *function_node);
-static void parse_function_body(FILE *input, ASTNode *function_node);
 
 // Helper: Parse a single function parameter (type and name)
-static ASTNode* parse_single_parameter(FILE *input, Token *parameter_type)
+static ASTNode* parse_single_parameter(ParserContext *ctx, Token *parameter_type)
 {
-    Token parameter_name = (Token){0};
-    ASTNode *parameter_node = NULL;
-    
     // Handle struct types
-    if (strcmp(current_token.value, "struct") == 0) {
-        advance(input);
-        if (!match(TOKEN_IDENTIFIER)) {
-            printf("Error (line %d): Expected struct name in parameter list\n", current_token.line);
+    if (strcmp(ctx->current_token.value, "struct") == 0) {
+        advance(ctx);
+        if (!match(ctx, TOKEN_IDENTIFIER)) {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected struct name in parameter list");
             return NULL;
         }
-        *parameter_type = current_token;
-        advance(input);
+        *parameter_type = ctx->current_token;
+        advance(ctx);
     } else {
-        *parameter_type = current_token;
-        advance(input);
+        *parameter_type = ctx->current_token;
+        advance(ctx);
     }
     
     // Get parameter name
-    if (!match(TOKEN_IDENTIFIER)) {
-        printf("Error (line %d): Expected parameter name\n", current_token.line);
+    if (!match(ctx, TOKEN_IDENTIFIER)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected parameter name");
         return NULL;
     }
     
-    parameter_name = current_token;
-    advance(input);
+    Token parameter_name = ctx->current_token;
+    advance(ctx);
     
     // Create parameter node
-    parameter_node = create_node(NODE_VAR_DECL);
+    ASTNode *parameter_node = create_node(NODE_VAR_DECL);
     parameter_node->token = *parameter_type;
-    parameter_node->value = strdup(parameter_name.value);
+    parameter_node->value = safe_strdup(parameter_name.value);
     
     return parameter_node;
 }
 
 // Helper: Parse all function parameters
-static void parse_function_parameters(FILE *input, ASTNode *function_node)
+static void parse_function_parameters(ParserContext *ctx, ASTNode *function_node)
 {
-    Token parameter_type = (Token){0};
-    ASTNode *parameter_node = NULL;
-    
-    if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
-        printf("Error (line %d): Expected '(' after function name\n", current_token.line);
-        free_node(function_node);
-        exit(EXIT_FAILURE);
+    if (!consume(ctx, TOKEN_PARENTHESIS_OPEN)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected '(' after function name");
+        return;
     }
     
-    while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF)) {
-        if (match(TOKEN_KEYWORD)) {
-            parameter_node = parse_single_parameter(input, &parameter_type);
+    while (!match(ctx, TOKEN_PARENTHESIS_CLOSE) && !match(ctx, TOKEN_EOF) && !has_errors()) {
+        if (match(ctx, TOKEN_KEYWORD)) {
+            Token parameter_type = (Token){0};
+            ASTNode *parameter_node = parse_single_parameter(ctx, &parameter_type);
             if (!parameter_node) {
                 break;
             }
@@ -77,66 +66,68 @@ static void parse_function_parameters(FILE *input, ASTNode *function_node)
             add_child(function_node, parameter_node);
             
             // Handle comma between parameters
-            if (match(TOKEN_COMMA)) {
-                advance(input);
+            if (match(ctx, TOKEN_COMMA)) {
+                advance(ctx);
             }
         } else {
-            advance(input);
+            advance(ctx);
         }
     }
     
-    if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
-        printf("Error (line %d): Expected ')' after parameter list\n", current_token.line);
-        free_node(function_node);
-        exit(EXIT_FAILURE);
+    if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected ')' after parameter list");
+        return;
     }
 }
 
 // Helper: Parse function body (statements within braces)
-static void parse_function_body(FILE *input, ASTNode *function_node)
+// Control flow statements (if/while/for) consume their own braces internally,
+// so we only need to watch for the function's closing brace here.
+static void parse_function_body(ParserContext *ctx, ASTNode *function_node)
 {
-    int brace_depth = INITIAL_BRACE_DEPTH;
-    ASTNode *statement_node = NULL;
-    
-    if (!consume(input, TOKEN_BRACE_OPEN)) {
-        printf("Error (line %d): Expected '{' to start function body\n", current_token.line);
-        free_node(function_node);
-        exit(EXIT_FAILURE);
+    if (!consume(ctx, TOKEN_BRACE_OPEN)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected '{' to start function body");
+        return;
     }
     
-    while (brace_depth > 0 && !match(TOKEN_EOF)) {
-        if (match(TOKEN_BRACE_OPEN)) {
-            brace_depth++;
-            advance(input);
-        } else if (match(TOKEN_BRACE_CLOSE)) {
-            brace_depth--;
-            advance(input);
-        } else {
-            statement_node = parse_statement(input);
-            if (statement_node) {
-                add_child(function_node, statement_node);
-            }
+    while (!match(ctx, TOKEN_BRACE_CLOSE) && !match(ctx, TOKEN_EOF) && !has_errors()) {
+        ASTNode *statement_node = parse_statement(ctx);
+        if (statement_node) {
+            add_child(function_node, statement_node);
         }
+    }
+    
+    if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected '}' after function body");
     }
 }
 
-ASTNode* parse_function(FILE *input, Token return_type, Token function_name)
+ASTNode* parse_function(ParserContext *ctx, Token return_type, Token function_name)
 {
-    ASTNode *function_node = NULL;
-    
     // Initialize function node
-    function_node = create_node(NODE_FUNCTION_DECL);
+    ASTNode *function_node = create_node(NODE_FUNCTION_DECL);
     function_node->token = return_type;
-    function_node->value = strdup(function_name.value);
+    function_node->value = safe_strdup(function_name.value);
     
     // Reset global array count for this function scope
-    g_array_count = 0;
+    reset_array_table();
     
     // Parse function parameters
-    parse_function_parameters(input, function_node);
+    parse_function_parameters(ctx, function_node);
+    if (has_errors()) {
+        free_node(function_node);
+        return NULL;
+    }
     
     // Parse function body
-    parse_function_body(input, function_node);
+    parse_function_body(ctx, function_node);
+    if (has_errors()) {
+        free_node(function_node);
+        return NULL;
+    }
     
     return function_node;
 }
