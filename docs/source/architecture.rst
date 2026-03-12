@@ -16,18 +16,24 @@ The compiler is structured as a pipeline:
     - Supports nested while loops, nested for loops, and correct handling of break/continue at any loop depth.
     - Supports nested expressions and statement blocks, including nested for and while loops.
 
-3. **VHDL Code Generation (compi.c, parse.c)**
+3. **VHDL Code Generation (src/codegen/)**
+    - Six modular files: ``codegen_vhdl_main.c``, ``codegen_vhdl_constants.c``,
+      ``codegen_vhdl_helpers.c``, ``codegen_vhdl_types.c``,
+      ``codegen_vhdl_expressions.c``, ``codegen_vhdl_statements.c``.
     - Traverses the AST and emits VHDL code.
     - Maps C types to VHDL types, handles signal declarations, assignments, and control flow.
     - Handles negative values and binary expressions correctly in VHDL.
     - Generates VHDL for while loops and for loops, including nested loops, break, and continue statements.
 
 4. **Utilities (utils.c / utils.h)**
-    - Provides string manipulation, error handling, memory management, type mapping, and AST printing.
+    - Provides string manipulation, memory management, AST printing, and numeric conversion helpers.
 
 5. **Testing (tests/*.cpp)**
-    - GoogleTest unit tests covering AST construction, utilities (precedence, numeric detection), lexer tokenization, and control-flow scaffolding.
-    - Each test is discovered individually via ``gtest_discover_tests`` allowing granular execution (e.g. regex filtering) through CTest or direct GoogleTest filters.
+    - GoogleTest unit, integration, and edge case tests (62 total).
+    - Covers AST construction, utilities, lexer tokenization, error handling,
+      end-to-end C→VHDL translation, and boundary conditions.
+    - Each test is discovered individually via ``gtest_discover_tests`` allowing
+      granular execution through CTest or direct GoogleTest filters.
 
 The modular design allows for easy extension to new C constructs and VHDL features.
 
@@ -57,6 +63,26 @@ Developer Debug Output
 ----------------------
 - Enable verbose debug output for developers by configuring the build with the `-DDEBUG=ON` argument in CMake. This provides additional debug prints and diagnostics during parsing and code generation.
 
+Global State and Threading
+--------------------------
+
+The compiler uses global state in several modules for simplicity and performance:
+
+**Error Handler** (``error_handler.c``):
+
+- ``error_count``, ``warning_count``: Track diagnostic counts per compilation.
+- **Rationale**: Avoids passing context through every function call in the parser and codegen. The compiler processes one file at a time in a single-threaded pipeline.
+- **Reset**: Call ``reset_error_state()`` between compilations if embedding in a tool.
+
+**Symbol Tables** (``symbol_structs.c``, ``symbol_arrays.c``):
+
+- Global tables for struct definitions and array size tracking.
+- **Rationale**: Struct types and array sizes are needed during code generation but are discovered during parsing. A global table provides O(1) lookup without threading pointers through the AST.
+- **Limitation**: Not thread-safe. For parallel compilation, each thread would need isolated symbol tables.
+- **Reset**: Call ``reset_struct_table()`` and ``reset_array_table()`` between compilations.
+
+**Future Consideration**: If multi-threaded compilation is needed, these modules should be refactored to use a context struct passed through the call chain.
+
 Testing Workflow
 ----------------
 
@@ -64,6 +90,4 @@ Testing Workflow
 2. Build and run tests: ``cmake --build build --target test_all``.
 3. Inspect or filter tests: ``ctest -N`` / ``ctest -R <regex>``.
 4. Use direct filtering: ``./build/compi_tests --gtest_filter=TokenTests.*``.
-
-Planned additions include integration (golden) tests for VHDL output and coverage reporting.
 

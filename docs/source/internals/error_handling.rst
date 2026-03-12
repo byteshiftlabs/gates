@@ -177,6 +177,16 @@ print_filename()
 
 Prints the filename with colon separator if filename is not NULL.
 
+print_line_number()
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+
+   static void print_line_number(int line)
+
+Prints ``line N: `` prefix if line number is valid (greater than ``INVALID_LINE_NUMBER``).
+Used by the legacy ``report_message()`` interface.
+
 print_location()
 ~~~~~~~~~~~~~~~~
 
@@ -491,7 +501,7 @@ Printf-style variadic functions (``...``) are used because:
 Testing
 =======
 
-The error handling system has 35 comprehensive tests covering:
+The error handling system has 22 comprehensive tests covering:
 
 1. **Basic functionality**: Info, warning, error messages
 2. **Counter management**: Accumulation, reset, has_errors()
