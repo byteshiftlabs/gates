@@ -4,7 +4,7 @@ Code Quality & Refactoring
 Overview
 --------
 
-The Compi codebase has undergone comprehensive refactoring to improve code quality, maintainability, and readability. This document describes the refactoring effort, principles applied, and improvements achieved.
+The Gates codebase has undergone comprehensive refactoring to improve code quality, maintainability, and readability. This document describes the refactoring effort, principles applied, and improvements achieved.
 
 Coding Standards
 ----------------
