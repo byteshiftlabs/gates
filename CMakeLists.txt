@@ -10,6 +10,12 @@ endif()
 option(DEBUG "Enable debug features" OFF)
 list(APPEND CMAKE_ARGS_C -DDEBUG=${DEBUG})
 
+# Configurable limits (can be overridden via cmake -DCOMPI_VHDL_BIT_WIDTH=64 ..)
+set(COMPI_VHDL_BIT_WIDTH 32 CACHE STRING "Bit width for VHDL integer types (8-128)")
+set(COMPI_MAX_PARAMETERS 128 CACHE STRING "Maximum function parameters (1-1024)")
+set(COMPI_MAX_STRUCTS 64 CACHE STRING "Maximum struct definitions")
+set(COMPI_MAX_ARRAYS 128 CACHE STRING "Maximum tracked arrays")
+
 # Set C standard
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -24,9 +30,11 @@ set(COMPI_ALL_SRC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_function.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_statement.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_control_flow.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_for.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_main.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_constants.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_helpers.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_emit.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_types.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_expressions.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_statements.c
@@ -47,14 +55,20 @@ target_include_directories(compi_gtest PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+target_compile_definitions(compi_gtest PUBLIC
+  COMPI_VHDL_BIT_WIDTH=${COMPI_VHDL_BIT_WIDTH}
+  COMPI_MAX_PARAMETERS=${COMPI_MAX_PARAMETERS}
+  COMPI_MAX_STRUCTS=${COMPI_MAX_STRUCTS}
+  COMPI_MAX_ARRAYS=${COMPI_MAX_ARRAYS}
+)
 
 add_executable(compi ${COMPI_MAIN_SRC})
 target_link_libraries(compi PRIVATE compi_gtest)
 
 # Add compiler warnings
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(compi_gtest PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(compi PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(compi_gtest PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  target_compile_options(compi PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
 endif()
 
 if(DEBUG)
@@ -65,6 +79,31 @@ endif()
 
 # Install targets
 install(TARGETS compi RUNTIME DESTINATION bin)
+
+# =====================
+# Static Analysis (cppcheck)
+# =====================
+find_program(CPPCHECK cppcheck)
+if(CPPCHECK)
+  message(STATUS "Found cppcheck: ${CPPCHECK}")
+  add_custom_target(cppcheck
+    COMMAND ${CPPCHECK}
+      --enable=all
+      --std=c11
+      --inconclusive
+      --force
+      --error-exitcode=1
+      --suppressions-list=${CMAKE_SOURCE_DIR}/tools/cppcheck_suppressions.txt
+      -I ${CMAKE_SOURCE_DIR}/include
+      -I ${CMAKE_SOURCE_DIR}/src
+      ${CMAKE_SOURCE_DIR}/src/
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Running cppcheck static analysis"
+    VERBATIM
+  )
+else()
+  message(STATUS "cppcheck not found — install it for static analysis (apt install cppcheck)")
+endif()
 
 # Docs target for Sphinx documentation
 add_custom_target(docs
@@ -90,6 +129,7 @@ if(ENABLE_TESTING)
     FetchContent_Declare(
       googletest
       URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+      URL_HASH SHA256=8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7
     )
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
