@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # build_and_run.sh - Convenience script to configure, build, test (optional) and run the 'compi' executable
-# Location: tools/dds/compi/
 #
 # Features:
 #  - Idempotent incremental builds (reconfigure only when needed)
