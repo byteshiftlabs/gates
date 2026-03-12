@@ -1,7 +1,12 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <stddef.h>
 #include "astnode.h"  // ASTNode definition
+
+// Buffer-safe string helpers
+void safe_append(char *dst, size_t dst_size, const char *src);
+void safe_copy(char *dst, size_t dst_size, const char *src, size_t limit);
 
 // Operator precedence constants (mirrors C precedence ordering)
 // Higher number = higher precedence

@@ -21,35 +21,6 @@ static ASTNode* parse_logical_not(FILE *input);
 static ASTNode* parse_bitwise_not(FILE *input);
 static ASTNode* parse_unary_minus(FILE *input);
 
-// Safe append helper to avoid strncat truncation warnings
-static inline void safe_append(char *dst, size_t dst_size, const char *src)
-{
-    size_t used = strlen(dst);
-    if (used >= dst_size - 1) {
-        return;
-    }
-    size_t available_space = dst_size - 1 - used;
-    size_t copy = strlen(src);
-    if (copy > available_space) {
-        copy = available_space;
-    }
-    memcpy(dst + used, src, copy);
-    dst[used + copy] = '\0';
-}
-
-static inline void safe_copy(char *dst, size_t dst_size, const char *src)
-{
-    if (!dst_size) {
-        return;
-    }
-    size_t n = strlen(src);
-    if (n >= dst_size) {
-        n = dst_size - 1;
-    }
-    memcpy(dst, src, n);
-    dst[n] = '\0';
-}
-
 // Helper: Parse logical NOT operator (!)
 static ASTNode* parse_logical_not(FILE *input)
 {
@@ -179,7 +150,7 @@ static void parse_array_index(FILE *input, char *index_buffer, size_t buffer_siz
             continue;
         }
         
-        if (current_token.value) {
+        if (current_token.value[0] != '\0') {
             safe_append(index_buffer, buffer_size, current_token.value);
         }
         advance(input);
@@ -292,7 +263,7 @@ static ASTNode* parse_identifier(FILE *input)
     char index_expression[INDEX_EXPRESSION_BUFFER_SIZE] = {0};
     char full_expression[FULL_EXPRESSION_BUFFER_SIZE] = {0};
     
-    safe_copy(identifier_name, sizeof(identifier_name), current_token.value);
+    safe_copy(identifier_name, sizeof(identifier_name), current_token.value, sizeof(identifier_name) - 1);
     advance(input);
     
     // Check for function call: identifier(args)
@@ -387,7 +358,7 @@ ASTNode* parse_expression_prec(FILE *input, int min_prec)
         if (operator_precedence < min_prec) {
             break;
         }
-        safe_copy(operator_copy, sizeof(operator_copy), operator);
+        safe_copy(operator_copy, sizeof(operator_copy), operator, sizeof(operator_copy) - 1);
         advance(input);
         right_operand = parse_expression_prec(input, operator_precedence + 1);
         if (!right_operand) {
