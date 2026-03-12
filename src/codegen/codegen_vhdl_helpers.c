@@ -1,18 +1,21 @@
 // VHDL Code Generator - Helper Utilities Implementation
 // -------------------------------------------------------------
 
-#include "codegen_vhdl_helpers.h"
-#include "codegen_vhdl_constants.h"
-#include "symbol_structs.h"
-#include <string.h>
 #include <ctype.h>
-#include <stdlib.h>
+#include <string.h>
+#include <strings.h>  // For strcasecmp
 
-// -------------------------------------------------------------
-// Helper function to check if a variable name needs remapping
-// Returns 1 if the variable name conflicts with reserved VHDL port names
-// -------------------------------------------------------------
-int is_signal_name_reserved(const char *variable_name)
+#include "codegen_vhdl_helpers.h"
+#include "error_handler.h"
+#include "codegen_vhdl_constants.h"
+#include "codegen_vhdl_emit.h"
+#include "symbol_structs.h"
+
+#define VHDL_IDENTIFIER_BUFFER_SIZE 256
+
+// VHDL port "result" conflicts with user variables named "result".
+// Reserved names get a "_local" suffix to avoid port shadowing.
+static int is_signal_name_reserved(const char *variable_name)
 {
     if (variable_name == NULL)
     {
@@ -22,47 +25,96 @@ int is_signal_name_reserved(const char *variable_name)
     return (strcmp(variable_name, RESERVED_PORT_NAME_RESULT) == 0);
 }
 
-// -------------------------------------------------------------
-// Helper function to emit a potentially remapped signal name
-// Writes the signal name to output, adding '_local' suffix if needed
-// -------------------------------------------------------------
-void emit_mapped_signal_name(const char *variable_name, FILE *output_file)
+// Central emission point for identifiers — ensures every name in the output
+// is valid VHDL (no leading digits, no consecutive underscores, no reserved words).
+void emit_safe_identifier(const char *name)
 {
-    if (is_signal_name_reserved(variable_name))
+    if (name == NULL)
     {
-        fprintf(output_file, "%s%s", variable_name, SIGNAL_SUFFIX_LOCAL);
+        emit_raw("%s", UNKNOWN_IDENTIFIER);
+        return;
+    }
+    
+    // Fast path: if already valid, emit directly
+    if (is_valid_vhdl_identifier(name))
+    {
+        emit_raw("%s", name);
+        return;
+    }
+    
+    // Sanitize the identifier
+    char buffer[VHDL_IDENTIFIER_BUFFER_SIZE];
+    if (sanitize_vhdl_identifier(name, buffer, sizeof(buffer)))
+    {
+        emit_raw("%s", buffer);
     }
     else
     {
-        const char *name_to_emit = (variable_name != NULL) ? variable_name : UNKNOWN_IDENTIFIER;
-        fprintf(output_file, "%s", name_to_emit);
+        // Fallback - emit warning and use original
+        log_warning(ERROR_CATEGORY_CODEGEN, 0,
+                    "Could not sanitize identifier '%s' for VHDL", name);
+        emit_raw("%s", name);
     }
 }
 
-// -------------------------------------------------------------
-// Check if operator is a boolean comparison operator
-// -------------------------------------------------------------
-int is_boolean_comparison_operator(const char *operator)
+// Emits a signal name, appending "_local" when it would shadow a VHDL port.
+// Sanitization runs first so the reserved-name check works on the final form.
+void emit_mapped_signal_name(const char *variable_name)
 {
-    if (operator == NULL)
+    if (variable_name == NULL)
+    {
+        emit_raw("%s", UNKNOWN_IDENTIFIER);
+        return;
+    }
+    
+    char buffer[VHDL_IDENTIFIER_BUFFER_SIZE];
+    const char *safe_name = variable_name;
+    
+    if (!is_valid_vhdl_identifier(variable_name))
+    {
+        if (sanitize_vhdl_identifier(variable_name, buffer, sizeof(buffer)))
+        {
+            safe_name = buffer;
+        }
+        else
+        {
+            log_warning(ERROR_CATEGORY_CODEGEN, 0,
+                        "Could not sanitize signal name '%s' for VHDL", variable_name);
+        }
+    }
+    
+    if (is_signal_name_reserved(safe_name))
+    {
+        emit_raw("%s%s", safe_name, SIGNAL_SUFFIX_LOCAL);
+    }
+    else
+    {
+        emit_raw("%s", safe_name);
+    }
+}
+
+// Boolean comparisons produce std_logic '0'/'1' in VHDL, not integers.
+// This distinction drives the emitter's decision to wrap results in boolean gates.
+int is_boolean_comparison_operator(const char *op)
+{
+    if (op == NULL)
     {
         return 0;
     }
 
-    return (strcmp(operator, OP_EQUAL) == 0 ||
-            strcmp(operator, OP_NOT_EQUAL) == 0 ||
-            strcmp(operator, OP_LESS_THAN) == 0 ||
-            strcmp(operator, OP_LESS_EQUAL) == 0 ||
-            strcmp(operator, OP_GREATER_THAN) == 0 ||
-            strcmp(operator, OP_GREATER_EQUAL) == 0 ||
-            strcmp(operator, OP_LOGICAL_AND) == 0 ||
-            strcmp(operator, OP_LOGICAL_OR) == 0);
+    return (strcmp(op, OP_EQUAL) == 0 ||
+            strcmp(op, OP_NOT_EQUAL) == 0 ||
+            strcmp(op, OP_LESS_THAN) == 0 ||
+            strcmp(op, OP_LESS_EQUAL) == 0 ||
+            strcmp(op, OP_GREATER_THAN) == 0 ||
+            strcmp(op, OP_GREATER_EQUAL) == 0 ||
+            strcmp(op, OP_LOGICAL_AND) == 0 ||
+            strcmp(op, OP_LOGICAL_OR) == 0);
 }
 
-// -------------------------------------------------------------
-// Check if AST node is a boolean expression
-// -------------------------------------------------------------
-int is_node_boolean_expression(ASTNode *node)
+// Determines whether a node produces a boolean result, which controls
+// whether the emitter wraps it in std_logic conversion vs arithmetic.
+int is_node_boolean_expression(const ASTNode *node)
 {
     if (node == NULL)
     {
@@ -84,20 +136,17 @@ int is_node_boolean_expression(ASTNode *node)
     return 0;
 }
 
-// -------------------------------------------------------------
-// Check if expression is a plain identifier (no array/struct access)
-// -------------------------------------------------------------
+// Plain identifiers emit directly; array/struct accesses need special
+// indexing or field-selection syntax in VHDL.
 int is_plain_identifier(const char *expression_value)
 {
-    const char *character_ptr = NULL;
-    
     if (expression_value == NULL)
     {
         return 0;
     }
     
-    // Check for array access brackets or struct field dots
-    for (character_ptr = expression_value; *character_ptr != '\0'; ++character_ptr)
+    // Array brackets, dots, and "__" all indicate compound access
+    for (const char *character_ptr = expression_value; *character_ptr != '\0'; ++character_ptr)
     {
         if (*character_ptr == '[' || *character_ptr == ']' || *character_ptr == '.')
         {
@@ -105,7 +154,6 @@ int is_plain_identifier(const char *expression_value)
         }
     }
     
-    // Check for double underscore (struct field encoding)
     if (strstr(expression_value, "__") != NULL)
     {
         return 0;
@@ -114,18 +162,12 @@ int is_plain_identifier(const char *expression_value)
     return 1;
 }
 
-// -------------------------------------------------------------
-// Numeric literal detection utilities
-// -------------------------------------------------------------
-
-/**
- * Check if a string value represents a numeric literal
- * @param value String to check
- * @return 1 if numeric (digits and optional decimal point), 0 otherwise
- */
+// Numeric literals need to_unsigned()/to_signed() casts in VHDL;
+// identifiers and expressions need unsigned()/signed() wrapping instead.
 int is_numeric_literal(const char *value)
 {
     const char *char_ptr = value;
+    int dot_count = 0;
     
     if (value == NULL || *value == '\0')
     {
@@ -135,7 +177,15 @@ int is_numeric_literal(const char *value)
     // Check each character
     while (*char_ptr != '\0')
     {
-        if (!isdigit(*char_ptr) && *char_ptr != '.')
+        if (*char_ptr == '.')
+        {
+            ++dot_count;
+            if (dot_count > 1)
+            {
+                return 0;
+            }
+        }
+        else if (!isdigit(*char_ptr))
         {
             return 0;
         }
@@ -145,11 +195,7 @@ int is_numeric_literal(const char *value)
     return 1;
 }
 
-/**
- * Check if a string value represents a negative numeric literal
- * @param value String to check
- * @return 1 if it starts with '-' followed by digits, 0 otherwise
- */
+// Negative numeric literals get to_signed() in VHDL, never to_unsigned().
 int is_negative_numeric_literal(const char *value)
 {
     if (value == NULL || value[0] != '-' || value[1] == '\0')
@@ -161,43 +207,25 @@ int is_negative_numeric_literal(const char *value)
     return is_numeric_literal(value + 1);
 }
 
-// -------------------------------------------------------------
-// Type conversion utilities
-// -------------------------------------------------------------
-
-/**
- * Emit VHDL unsigned cast for a literal value
- * @param value The value to cast (must be numeric)
- * @param output_file Output stream
- */
-void emit_unsigned_cast(const char *value, FILE *output_file)
+// VHDL requires explicit width for numeric conversions;
+// VHDL_BIT_WIDTH ensures consistent sizing across the design.
+void emit_unsigned_cast(const char *value)
 {
-    fprintf(output_file, "to_unsigned(%s, %d)", value, VHDL_BIT_WIDTH);
+    emit_raw("to_unsigned(%s, %d)", value, VHDL_BIT_WIDTH);
 }
 
-/**
- * Emit VHDL signed cast for a literal value
- * @param value The value to cast (must be numeric)
- * @param output_file Output stream
- */
-void emit_signed_cast(const char *value, FILE *output_file)
+void emit_signed_cast(const char *value)
 {
-    fprintf(output_file, "to_signed(%s, %d)", value, VHDL_BIT_WIDTH);
+    emit_raw("to_signed(%s, %d)", value, VHDL_BIT_WIDTH);
 }
 
-/**
- * Emit a typed operand with appropriate VHDL casting
- * Handles both literal values and complex expressions
- * @param operand AST node representing the operand
- * @param output_file Output stream
- * @param is_signed 1 if operand should be treated as signed, 0 for unsigned
- * @param node_generator Function pointer to generate nested nodes
- */
-void emit_typed_operand(ASTNode *operand, FILE *output_file, int is_signed, void (*node_generator)(ASTNode*, FILE*))
+// Literals use to_unsigned/to_signed; variable references use unsigned()/signed()
+// wrapping because they're already std_logic_vector signals.
+void emit_typed_operand(ASTNode *operand, int is_signed, void (*node_generator)(ASTNode*))
 {
     if (operand == NULL)
     {
-        fprintf(output_file, "0");
+        emit_raw("0");
         return;
     }
     
@@ -206,120 +234,42 @@ void emit_typed_operand(ASTNode *operand, FILE *output_file, int is_signed, void
     {
         if (is_negative_numeric_literal(operand->value))
         {
-            emit_signed_cast(operand->value, output_file);
+            emit_signed_cast(operand->value);
         }
         else if (is_numeric_literal(operand->value))
         {
             if (is_signed)
             {
-                emit_signed_cast(operand->value, output_file);
+                emit_signed_cast(operand->value);
             }
             else
             {
-                emit_unsigned_cast(operand->value, output_file);
+                emit_unsigned_cast(operand->value);
             }
         }
         else
         {
             // Variable or expression - wrap in unsigned/signed cast
-            fprintf(output_file, "%s(", is_signed ? "signed" : "unsigned");
-            fprintf(output_file, "%s", operand->value);
-            fprintf(output_file, ")");
+            emit_raw("%s(", is_signed ? "signed" : "unsigned");
+            emit_raw("%s", operand->value);
+            emit_raw(")");
         }
     }
     else
     {
         // Complex expression - recursively generate and wrap
-        fprintf(output_file, "%s(", is_signed ? "signed" : "unsigned");
+        emit_raw("%s(", is_signed ? "signed" : "unsigned");
         if (node_generator != NULL)
         {
-            node_generator(operand, output_file);
+            node_generator(operand);
         }
-        fprintf(output_file, ")");
+        emit_raw(")");
     }
 }
 
-// -------------------------------------------------------------
-// Array utilities
-// -------------------------------------------------------------
-
-/**
- * Parse array declaration to extract name and size
- * @param value String like "arr[10]"
- * @param name_out Buffer to store extracted name
- * @param name_size Size of name_out buffer
- * @param size_out Pointer to store extracted size
- * @return 1 if successfully parsed, 0 otherwise
- */
-int parse_array_declaration(const char *value, char *name_out, int name_size, int *size_out)
-{
-    const char *bracket_pos = NULL;
-    const char *size_start = NULL;
-    const char *size_end = NULL;
-    int name_length = 0;
-    char size_buffer[ARRAY_SIZE_BUFFER_SIZE] = {0};
-    
-    if (value == NULL || name_out == NULL || size_out == NULL)
-    {
-        return 0;
-    }
-    
-    bracket_pos = strchr(value, '[');
-    if (bracket_pos == NULL)
-    {
-        return 0;
-    }
-    
-    // Extract array name
-    name_length = (int)(bracket_pos - value);
-    if (name_length >= name_size)
-    {
-        name_length = name_size - 1;
-    }
-    strncpy(name_out, value, name_length);
-    name_out[name_length] = '\0';
-    
-    // Extract array size
-    size_start = bracket_pos + 1;
-    size_end = strchr(size_start, ']');
-    
-    if (size_end == NULL || size_end <= size_start)
-    {
-        return 0;
-    }
-    
-    strncpy(size_buffer, size_start, size_end - size_start);
-    size_buffer[size_end - size_start] = '\0';
-    
-    *size_out = atoi(size_buffer);
-    
-    return (*size_out > 0) ? 1 : 0;
-}
-
-/**
- * Emit VHDL array type and signal declaration
- * @param name Array name
- * @param type VHDL element type
- * @param size Array size
- * @param output_file Output stream
- */
-void emit_array_type_and_signal(const char *name, const char *type, int size, FILE *output_file)
-{
-    fprintf(output_file, "  type %s_type is array (0 to %d) of %s;\n", name, size - 1, type);
-    fprintf(output_file, "  signal %s : %s_type;\n", name, name);
-}
-
-// -------------------------------------------------------------
-// Statement utilities
-// -------------------------------------------------------------
-
-/**
- * Unwrap single-child statement nodes
- * Returns the inner node if it's a NODE_STATEMENT with one child of type
- * NODE_VAR_DECL or NODE_ASSIGNMENT, otherwise returns the original node
- * @param node Node to unwrap
- * @return Unwrapped node or original node
- */
+// The parser wraps assignments and declarations in NODE_STATEMENT nodes.
+// Unwrapping lets the codegen handle the inner node directly without
+// an extra nesting level in each emitter function.
 ASTNode* unwrap_statement_node(ASTNode *node)
 {
     if (node == NULL)
@@ -338,38 +288,220 @@ ASTNode* unwrap_statement_node(ASTNode *node)
     return node;
 }
 
-// -------------------------------------------------------------
-// Struct field utilities
-// -------------------------------------------------------------
-
-/**
- * Emit field-by-field assignments between two struct instances
- * @param struct_index Index in g_structs array
- * @param target_name Name of target struct variable
- * @param source_name Name of source struct variable
- * @param output_file Output stream
- * @param indentation Indentation string for each line
- */
+// VHDL records can't be assigned as a whole in all contexts,
+// so we emit per-field "<=" assignments to ensure compatibility.
 void emit_struct_field_assignments(int struct_index, const char *target_name, 
-                                   const char *source_name, FILE *output_file, 
-                                   const char *indentation)
+                                   const char *source_name)
 {
-    int field_index = 0;
-    
-    if (struct_index < 0 || target_name == NULL || source_name == NULL)
+    const StructInfo *struct_info = get_struct_info(struct_index);
+    if (!struct_info || target_name == NULL || source_name == NULL)
     {
+        log_warning(ERROR_CATEGORY_CODEGEN, 0,
+                    "Cannot emit struct field assignments: invalid struct or names");
         return;
     }
     
-    for (field_index = 0; field_index < g_structs[struct_index].field_count; ++field_index)
+    for (int field_index = 0; field_index < struct_info->field_count; ++field_index)
     {
-        fprintf(output_file, "%s%s.%s <= %s.%s;\n", 
-                indentation,
+        emit_line("%s.%s <= %s.%s;", 
                 target_name,
-                g_structs[struct_index].fields[field_index].field_name,
+                struct_info->fields[field_index].field_name,
                 source_name,
-                g_structs[struct_index].fields[field_index].field_name);
+                struct_info->fields[field_index].field_name);
     }
 }
 
+// Map C primitive types to VHDL std_logic_vector widths.
+// Uses centralized VHDL_TYPE_* constants so IEEE 754 float support
+// requires changing only VHDL_TYPE_FLOAT in codegen_vhdl_constants.c.
+const char* ctype_to_vhdl(const char* ctype)
+{
+    if (strcmp(ctype, C_TYPE_INT) == 0) {
+        return VHDL_TYPE_INT;
+    } else if (strcmp(ctype, C_TYPE_FLOAT) == 0) {
+        return VHDL_TYPE_FLOAT;
+    } else if (strcmp(ctype, C_TYPE_DOUBLE) == 0) {
+        return VHDL_TYPE_DOUBLE;
+    } else if (strcmp(ctype, C_TYPE_CHAR) == 0) {
+        return VHDL_TYPE_CHAR;
+    }
+    return VHDL_TYPE_DEFAULT;
+}
 
+// Broader negative check than is_negative_numeric_literal(): also allows
+// hex/alpha suffixes (e.g. "-0x1F") that appear in some C literal forms.
+int is_negative_literal(const char* value)
+{
+    if (!value || value[0] != '-' || strlen(value) < 2)
+        return 0;
+
+    int char_idx = 1;
+    int has_literal_chars = 0;
+
+    while (value[char_idx]) {
+        if (isdigit(value[char_idx]) || value[char_idx] == '.' || isalpha(value[char_idx]) || value[char_idx] == '_') {
+            has_literal_chars = 1;
+        } else {
+            return 0;
+        }
+        char_idx++;
+    }
+
+    return has_literal_chars;
+}
+
+// Sanitization must avoid these — a C identifier like "process" would
+// produce invalid VHDL without renaming.
+static const char *vhdl_reserved_words[] = {
+    "abs", "access", "after", "alias", "all", "and", "architecture",
+    "array", "assert", "attribute", "begin", "block", "body", "buffer",
+    "bus", "case", "component", "configuration", "constant", "disconnect",
+    "downto", "else", "elsif", "end", "entity", "exit", "file", "for",
+    "function", "generate", "generic", "group", "guarded", "if", "impure",
+    "in", "inertial", "inout", "is", "label", "library", "linkage",
+    "literal", "loop", "map", "mod", "nand", "new", "next", "nor", "not",
+    "null", "of", "on", "open", "or", "others", "out", "package", "port",
+    "postponed", "procedure", "process", "pure", "range", "record",
+    "register", "reject", "rem", "report", "return", "rol", "ror",
+    "select", "severity", "signal", "shared", "sla", "sll", "sra", "srl",
+    "subtype", "then", "to", "transport", "type", "unaffected", "units",
+    "until", "use", "variable", "wait", "when", "while", "with", "xnor", "xor",
+    NULL
+};
+
+// Case-insensitive because VHDL identifiers are case-insensitive.
+static int is_vhdl_reserved_word(const char *name)
+{
+    if (name == NULL)
+    {
+        return 0;
+    }
+    
+    for (int i = 0; vhdl_reserved_words[i] != NULL; ++i)
+    {
+        if (strcasecmp(name, vhdl_reserved_words[i]) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// VHDL identifier rules: must start with letter, no consecutive underscores,
+// no trailing underscore, no reserved words. Invalid identifiers get sanitized.
+int is_valid_vhdl_identifier(const char *name)
+{
+    if (name == NULL || name[0] == '\0')
+    {
+        return 0;
+    }
+    
+    // Must start with a letter
+    if (!isalpha(name[0]))
+    {
+        return 0;
+    }
+    
+    size_t len = strlen(name);
+    
+    // Cannot end with underscore
+    if (name[len - 1] == '_')
+    {
+        return 0;
+    }
+    
+    // Check all characters and consecutive underscores
+    int prev_was_underscore = 0;
+    for (size_t i = 0; i < len; ++i)
+    {
+        char c = name[i];
+        
+        if (c == '_')
+        {
+            if (prev_was_underscore)
+            {
+                return 0;  // Consecutive underscores not allowed
+            }
+            prev_was_underscore = 1;
+        }
+        else if (isalnum(c))
+        {
+            prev_was_underscore = 0;
+        }
+        else
+        {
+            return 0;  // Invalid character
+        }
+    }
+    
+    // Check against reserved words
+    if (is_vhdl_reserved_word(name))
+    {
+        return 0;
+    }
+    
+    return 1;
+}
+
+// Transforms C identifiers into valid VHDL: prefixes digits/underscores
+// with "c_", collapses double underscores, and escapes reserved words with "v_".
+int sanitize_vhdl_identifier(const char *name, char *buffer, size_t buffer_size)
+{
+    if (name == NULL || buffer == NULL || buffer_size < 4)
+    {
+        return 0;
+    }
+    
+    size_t out_idx = 0;
+    
+    // Prefix with 'c_' if starts with digit or underscore
+    if (!isalpha(name[0]))
+    {
+        if (out_idx + 2 >= buffer_size) return 0;
+        buffer[out_idx++] = 'c';
+        buffer[out_idx++] = '_';
+    }
+    
+    int prev_was_underscore = (out_idx > 0 && buffer[out_idx - 1] == '_');
+    size_t name_len = strlen(name);
+    for (size_t i = 0; i < name_len && out_idx < buffer_size - 1; ++i)
+    {
+        char c = name[i];
+        
+        if (c == '_')
+        {
+            if (!prev_was_underscore)
+            {
+                buffer[out_idx++] = '_';
+                prev_was_underscore = 1;
+            }
+            // Skip consecutive underscores
+        }
+        else if (isalnum(c))
+        {
+            buffer[out_idx++] = c;
+            prev_was_underscore = 0;
+        }
+        // Skip other invalid characters
+    }
+    
+    // Remove trailing underscore
+    if (out_idx > 0 && buffer[out_idx - 1] == '_')
+    {
+        out_idx--;
+    }
+    
+    buffer[out_idx] = '\0';
+    
+    // Check if result is a reserved word, prefix with 'v_' if so
+    if (is_vhdl_reserved_word(buffer))
+    {
+        if (out_idx + 3 >= buffer_size) return 0;
+        // Shift right and add prefix
+        memmove(buffer + 2, buffer, out_idx + 1);
+        buffer[0] = 'v';
+        buffer[1] = '_';
+    }
+    
+    return 1;
+}

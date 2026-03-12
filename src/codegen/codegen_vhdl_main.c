@@ -4,37 +4,36 @@
 // -------------------------------------------------------------
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "codegen_vhdl.h"
 #include "codegen_vhdl_constants.h"
+#include "codegen_vhdl_emit.h"
 #include "codegen_vhdl_helpers.h"
 #include "codegen_vhdl_types.h"
 #include "codegen_vhdl_expressions.h"
 #include "codegen_vhdl_statements.h"
+#include "error_handler.h"
 #include "symbol_structs.h"
-#include "utils.h"
 
-// -------------------------------------------------------------
 // Forward declarations
-// -------------------------------------------------------------
-static void generate_node(ASTNode *node, FILE *output_file);
-static void generate_program(ASTNode *node, FILE *output_file);
-static void generate_function_declaration(ASTNode *node, FILE *output_file);
+static void generate_node(ASTNode *node);
+static void generate_program(ASTNode *node);
+static void generate_function_declaration(ASTNode *node);
+static void emit_entity_declaration(const char *function_name,
+                                    ASTNode *parameters[], int parameter_count,
+                                    ASTNode *node);
+static void emit_architecture(const char *function_name, ASTNode *node);
 
-// -------------------------------------------------------------
-// Public entry point
-// -------------------------------------------------------------
+// Top-level entry point — called once per compilation to emit complete VHDL
 void generate_vhdl(ASTNode *root, FILE *output_file)
 {
-    generate_node(root, output_file);
+    emit_init(output_file);
+    generate_node(root);
 }
 
-// -------------------------------------------------------------
-// Node dispatcher - routes AST nodes to appropriate generators
-// -------------------------------------------------------------
-static void generate_node(ASTNode *node, FILE *output_file)
+// Route each AST node type to the VHDL generator that handles its semantics.
+// Unary ops are stored in BINARY_OP nodes because the parser reuses that type.
+static void generate_node(ASTNode *node)
 {
     if (node == NULL)
     {
@@ -44,52 +43,52 @@ static void generate_node(ASTNode *node, FILE *output_file)
     switch (node->type)
     {
         case NODE_PROGRAM:
-            generate_program(node, output_file);
+            generate_program(node);
             break;
             
         case NODE_FUNCTION_DECL:
-            generate_function_declaration(node, output_file);
+            generate_function_declaration(node);
             break;
             
         case NODE_STATEMENT:
-            generate_statement_block(node, output_file, generate_node);
+            generate_statement_block(node, generate_node);
             break;
             
         case NODE_WHILE_STATEMENT:
-            generate_while_loop(node, output_file, generate_node);
+            generate_while_loop(node, generate_node);
             break;
             
         case NODE_FOR_STATEMENT:
-            generate_for_loop(node, output_file, generate_node);
+            generate_for_loop(node, generate_node);
             break;
             
         case NODE_IF_STATEMENT:
-            generate_if_statement(node, output_file, generate_node);
+            generate_if_statement(node, generate_node);
             break;
             
         case NODE_BREAK_STATEMENT:
-            generate_break_statement(node, output_file);
+            generate_break_statement(node);
             break;
             
         case NODE_CONTINUE_STATEMENT:
-            generate_continue_statement(node, output_file);
+            generate_continue_statement(node);
             break;
             
         case NODE_BINARY_EXPR:
-            generate_binary_expression(node, output_file);
+            generate_binary_expression(node, generate_node);
             break;
             
         case NODE_BINARY_OP:
             // Unary ops are stored in BINARY_OP nodes in the parser
-            generate_unary_operation(node, output_file);
+            generate_unary_operation(node, generate_node);
             break;
             
         case NODE_EXPRESSION:
-            generate_expression(node, output_file);
+            generate_expression(node);
             break;
             
         case NODE_FUNC_CALL:
-            generate_function_call(node, output_file);
+            generate_function_call(node, generate_node);
             break;
             
         default:
@@ -98,123 +97,155 @@ static void generate_node(ASTNode *node, FILE *output_file)
     }
 }
 
-// -------------------------------------------------------------
-// Program (top-level) code generation
-// -------------------------------------------------------------
-static void generate_program(ASTNode *node, FILE *output_file)
+// Emit VHDL library imports and struct type declarations, then generate
+// each function as an independent entity/architecture pair.
+static void generate_program(ASTNode *node)
 {
-    int child_index = 0;
-
     // Emit VHDL header
-    fprintf(output_file, "-- VHDL generated by compi\n\n");
-    fprintf(output_file, "library IEEE;\n");
-    fprintf(output_file, "use IEEE.STD_LOGIC_1164.ALL;\n");
-    fprintf(output_file, "use IEEE.NUMERIC_STD.ALL;\n\n");
+    emit_line("-- VHDL generated by compi");
+    emit_newline();
+    emit_line("library IEEE;");
+    emit_line("use IEEE.STD_LOGIC_1164.ALL;");
+    emit_line("use IEEE.NUMERIC_STD.ALL;");
+    emit_newline();
 
     // Emit struct type declarations
-    emit_all_struct_declarations(output_file);
+    emit_all_struct_declarations();
 
     // Generate code for all child nodes (functions)
-    for (child_index = 0; child_index < node->num_children; ++child_index)
+    for (int child_index = 0; child_index < node->num_children; ++child_index)
     {
-        generate_node(node->children[child_index], output_file);
+        generate_node(node->children[child_index]);
     }
 }
 
-// -------------------------------------------------------------
-// Function declaration -> VHDL entity + architecture
-// -------------------------------------------------------------
-static void generate_function_declaration(ASTNode *node, FILE *output_file)
+// Each C function becomes a VHDL entity (port interface) + architecture (behavior).
+// Parameters become input ports, return type becomes the result output port.
+static void generate_function_declaration(ASTNode *node)
 {
     const char *function_name = (node->value != NULL) ? node->value : DEFAULT_FUNCTION_NAME;
     ASTNode *parameters[MAX_PARAMETERS] = {NULL};
     int parameter_count = 0;
-    int child_index = 0;
 
-    // Entity declaration header
-    fprintf(output_file, "-- Function: %s\n", function_name);
-    fprintf(output_file, "entity %s is\n", function_name);
-    fprintf(output_file, "  port (\n");
-    fprintf(output_file, "    clk   : in  std_logic;\n");
-    fprintf(output_file, "    reset : in  std_logic;\n");
-
-    // Collect function parameters (variable declaration children)
-    for (child_index = 0; child_index < node->num_children; ++child_index)
+    // Map C function parameters to VHDL entity input ports
+    for (int child_index = 0; child_index < node->num_children; ++child_index)
     {
         ASTNode *child_node = node->children[child_index];
         
         if (child_node->type == NODE_VAR_DECL)
         {
-            parameters[parameter_count] = child_node;
-            parameter_count++;
+            if (parameter_count < MAX_PARAMETERS)
+            {
+                parameters[parameter_count] = child_node;
+                parameter_count++;
+            }
+            else
+            {
+                log_error(ERROR_CATEGORY_CODEGEN, 0,
+                          "Function '%s' exceeds maximum parameter limit (%d). "
+                          "Recompile with -DCOMPI_MAX_PARAMETERS=<larger_value>",
+                          function_name, MAX_PARAMETERS);
+                return;
+            }
         }
     }
 
-    // Emit input ports for each parameter
-    for (child_index = 0; child_index < parameter_count; ++child_index)
+    emit_entity_declaration(function_name, parameters, parameter_count, node);
+    emit_architecture(function_name, node);
+}
+
+// Emit VHDL entity: port interface with clk, reset, parameter inputs, and result output
+static void emit_entity_declaration(const char *function_name,
+                                    ASTNode *parameters[], int parameter_count,
+                                    ASTNode *node)
+{
+    emit_line("-- Function: %s", function_name);
+    emit_indented("entity ");
+    emit_safe_identifier(function_name);
+    emit_raw(" is\n");
+    
+    emit_indent_inc();
+    emit_line("port (");
+    emit_indent_inc();
+    
+    emit_line("%s   : in  std_logic;", VHDL_PORT_CLK);
+    emit_line("%s : in  std_logic;", VHDL_PORT_RESET);
+
+    for (int child_index = 0; child_index < parameter_count; ++child_index)
     {
-        ASTNode *parameter = parameters[child_index];
+        const ASTNode *parameter = parameters[child_index];
         int struct_index = find_struct_index(parameter->token.value);
-        int is_struct_type = (struct_index >= 0);
         
-        if (is_struct_type)
-        {
-            fprintf(output_file, "    %s : in %s_t;\n", 
-                    parameter->value, parameter->token.value);
-        }
-        else
-        {
-            fprintf(output_file, "    %s : in %s;\n", 
-                    parameter->value, ctype_to_vhdl(parameter->token.value));
+        emit_indent();
+        emit_safe_identifier(parameter->value);
+        if (struct_index >= 0) {
+            emit_raw(" : in %s_t;\n", parameter->token.value);
+        } else {
+            emit_raw(" : in %s;\n", ctype_to_vhdl(parameter->token.value));
         }
     }
 
-    // Emit output port (result)
+    // Result output port type matches C function return type
     if (node->token.value[0] != '\0')
     {
         int return_struct_index = find_struct_index(node->token.value);
-        int is_struct_return = (return_struct_index >= 0);
-        
-        if (is_struct_return)
-        {
-            fprintf(output_file, "    result : out %s_t\n", node->token.value);
-        }
-        else
-        {
-            fprintf(output_file, "    result : out %s\n", 
-                    ctype_to_vhdl(node->token.value));
+        if (return_struct_index >= 0) {
+            emit_line("%s : out %s_t", VHDL_PORT_RESULT, node->token.value);
+        } else {
+            emit_line("%s : out %s", VHDL_PORT_RESULT,
+                      ctype_to_vhdl(node->token.value));
         }
     }
     else
     {
-        fprintf(output_file, "    result : out std_logic_vector(%d downto 0)\n", 
-                VHDL_BIT_WIDTH - 1);
+        emit_line("%s : out std_logic_vector(%d downto 0)",
+                  VHDL_PORT_RESULT, VHDL_BIT_WIDTH - 1);
     }
     
-    fprintf(output_file, "  );\nend entity;\n\n");
+    emit_indent_dec();
+    emit_line(");");
+    emit_indent_dec();
+    emit_line("end entity;");
+    emit_newline();
+}
 
-    // Architecture declaration
-    fprintf(output_file, "architecture behavioral of %s is\n", function_name);
-    emit_function_local_signals(node, output_file);
-    fprintf(output_file, "begin\n");
-    fprintf(output_file, "  process(clk, reset)\n");
-    fprintf(output_file, "  begin\n");
-    fprintf(output_file, "    if reset = '1' then\n");
-    fprintf(output_file, "      -- Reset logic (user-defined)\n");
-    fprintf(output_file, "    elsif rising_edge(clk) then\n");
+// Emit VHDL architecture: local signals, clocked process with reset, body statements
+static void emit_architecture(const char *function_name, ASTNode *node)
+{
+    emit_indented("architecture behavioral of ");
+    emit_safe_identifier(function_name);
+    emit_raw(" is\n");
+    
+    emit_function_local_signals(node);
+    
+    emit_line("begin");
+    emit_indent_inc();
+    
+    emit_line("process(%s, %s)", VHDL_PORT_CLK, VHDL_PORT_RESET);
+    emit_line("begin");
+    emit_indent_inc();
+    
+    emit_line("if %s = '1' then", VHDL_PORT_RESET);
+    emit_indent_inc();
+    emit_function_reset_logic(node);
+    emit_indent_dec();
+    
+    emit_line("elsif rising_edge(%s) then", VHDL_PORT_CLK);
+    emit_indent_inc();
 
-    // Generate function body statements
-    for (child_index = 0; child_index < node->num_children; ++child_index)
+    for (int child_index = 0; child_index < node->num_children; ++child_index)
     {
         ASTNode *child = node->children[child_index];
-        
-        if (child->type == NODE_STATEMENT)
-        {
-            generate_node(child, output_file);
+        if (child->type == NODE_STATEMENT) {
+            generate_node(child);
         }
     }
 
-    fprintf(output_file, "    end if;\n");
-    fprintf(output_file, "  end process;\n");
-    fprintf(output_file, "end architecture;\n\n");
+    emit_indent_dec();
+    emit_line("end if;");
+    emit_indent_dec();
+    emit_line("end process;");
+    emit_indent_dec();
+    emit_line("end architecture;");
+    emit_newline();
 }
