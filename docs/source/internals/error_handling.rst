@@ -458,7 +458,7 @@ Why stderr?
 All error messages are written to ``stderr`` rather than ``stdout`` because:
 
 1. Separates error output from program output
-2. Allows users to redirect errors separately: ``./compi file.c 2> errors.log``
+2. Allows users to redirect errors separately: ``./gates file.c 2> errors.log``
 3. Follows Unix conventions for diagnostic messages
 
 Why Static Helper Functions?
