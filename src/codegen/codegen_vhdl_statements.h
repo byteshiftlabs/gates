@@ -6,29 +6,24 @@
 #ifndef CODEGEN_VHDL_STATEMENTS_H
 #define CODEGEN_VHDL_STATEMENTS_H
 
-#include <stdio.h>
 #include "astnode.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // -------------------------------------------------------------
 // Statement generation
 // -------------------------------------------------------------
-void generate_statement_block(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*));
-void generate_while_loop(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*));
-void generate_for_loop(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*));
-void generate_if_statement(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*));
-void generate_break_statement(ASTNode *node, FILE *output_file);
-void generate_continue_statement(ASTNode *node, FILE *output_file);
+void generate_statement_block(ASTNode *node, void (*node_generator)(ASTNode*));
+void generate_while_loop(ASTNode *node, void (*node_generator)(ASTNode*));
+void generate_for_loop(ASTNode *node, void (*node_generator)(ASTNode*));
+void generate_if_statement(ASTNode *node, void (*node_generator)(ASTNode*));
+void generate_break_statement(ASTNode *node);
+void generate_continue_statement(ASTNode *node);
 
-// -------------------------------------------------------------
-// Statement emission helpers
-// -------------------------------------------------------------
-void emit_variable_initializer(ASTNode *declaration, FILE *output_file, const char *indentation, void (*node_generator)(ASTNode*, FILE*));
-void emit_variable_assignment(ASTNode *assignment, FILE *output_file, const char *indentation, void (*node_generator)(ASTNode*, FILE*));
-void emit_struct_field_initializations(ASTNode *var_decl, int struct_index, 
-                                       ASTNode *initializer, FILE *output_file, void (*node_generator)(ASTNode*, FILE*));
-void emit_expression_as_return(ASTNode *expression, ASTNode *parent_statement, 
-                              FILE *output_file, void (*node_generator)(ASTNode*, FILE*));
-void emit_struct_field_copy_to_result(ASTNode *expression, ASTNode *function_node, 
-                                      FILE *output_file, const char *indentation);
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CODEGEN_VHDL_STATEMENTS_H
