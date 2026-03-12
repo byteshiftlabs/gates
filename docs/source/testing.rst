@@ -54,20 +54,16 @@ manual edit to ``CMakeLists.txt`` is required.
 Internals / Notes
 -----------------
 
-* Tests link against the reusable ``compi_core`` static library (all C sources
+* Tests link against the reusable ``compi_gtest`` static library (all C sources
   except the CLI ``compi.c``) to avoid duplicating logic.
 * Some tests touch internal global variables (e.g. ``g_array_count``,
   ``current_token``). Future refactors may wrap these with a fixture to
   improve isolation.
 * Enable additional parser/code generation diagnostics by configuring with
   ``-DDEBUG=ON``.
-* A future enhancement will introduce integration (end‑to‑end) tests comparing
-  expected VHDL output for sample C inputs.
 
 Planned Enhancements
 --------------------
 
-* Parser end‑to‑end tests (C → AST → VHDL golden output)
 * Coverage reporting (gcov / lcov) optional target
 * Test fixtures around global state
-* Negative / error path tests for parser diagnostics

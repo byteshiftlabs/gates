@@ -196,7 +196,7 @@ parse_expression.c
   
      #define IDENTIFIER_BUFFER_SIZE 128
      #define INDEX_EXPRESSION_BUFFER_SIZE 512
-     #define FULL_EXPRESSION_BUFFER_SIZE (IDENTIFIER_BUFFER_SIZE + INDEX_EXPRESSION_BUFFER_SIZE + 100)
+     #define FULL_EXPRESSION_BUFFER_SIZE (IDENTIFIER_BUFFER_SIZE + INDEX_EXPRESSION_BUFFER_SIZE + 3)
      #define OPERATOR_COPY_BUFFER_SIZE 8
      #define TOP_LEVEL_EXPR_MIN_PRECEDENCE -2
      #define PARENTHESIZED_EXPR_MIN_PRECEDENCE 1
@@ -490,12 +490,12 @@ Each helper does one thing:
 .. code-block:: c
 
    // Good: Clear single purpose
-   static ASTNode* parse_logical_not(FILE *input);
-   static ASTNode* parse_return_statement(FILE *input);
+   static ASTNode* parse_logical_not(ParserContext *ctx);
+   static ASTNode* parse_return_statement(ParserContext *ctx);
    static void validate_array_bounds(const char *array_name, const char *index_str);
    
    // Bad: Multiple responsibilities
-   static ASTNode* parse_unary_and_validate(FILE *input);
+   static ASTNode* parse_unary_and_validate(ParserContext *ctx);
 
 **Clear Naming:**
 
@@ -505,11 +505,11 @@ Function names describe exactly what they do:
 
    // Good: Clear purpose from name
    static void register_struct_in_table(int struct_index, Token struct_name_token);
-   static ASTNode* parse_else_blocks(FILE *input, ASTNode *if_node);
+   static ASTNode* parse_else_blocks(ParserContext *ctx, ASTNode *if_node);
    
    // Bad: Generic/unclear
    static void handle_struct(int idx, Token t);
-   static ASTNode* process_blocks(FILE *input, ASTNode *n);
+   static ASTNode* process_blocks(ParserContext *ctx, ASTNode *n);
 
 **Forward Declarations:**
 
@@ -518,13 +518,13 @@ All helper functions declared at top of file:
 .. code-block:: c
 
    // Forward declarations
-   static ASTNode* parse_logical_not(FILE *input);
-   static ASTNode* parse_bitwise_not(FILE *input);
-   static ASTNode* parse_unary_minus(FILE *input);
+   static ASTNode* parse_logical_not(ParserContext *ctx);
+   static ASTNode* parse_bitwise_not(ParserContext *ctx);
+   static ASTNode* parse_unary_minus(ParserContext *ctx);
    // ...
    
    // Implementations
-   static ASTNode* parse_logical_not(FILE *input) {
+   static ASTNode* parse_logical_not(ParserContext *ctx) {
        // ...
    }
 
@@ -544,11 +544,11 @@ Consistent file structure across all modules:
    #define IDENTIFIER_BUFFER_SIZE 128
    
    // 3. Helper function forward declarations
-   static ASTNode* helper_function_1(FILE *input);
+   static ASTNode* helper_function_1(ParserContext *ctx);
    static void helper_function_2(int param);
    
    // 4. Helper function implementations
-   static ASTNode* helper_function_1(FILE *input) {
+   static ASTNode* helper_function_1(ParserContext *ctx) {
        // Implementation
    }
    
@@ -557,7 +557,7 @@ Consistent file structure across all modules:
    }
    
    // 5. Public API functions
-   ASTNode* parse_function(FILE *input, Token return_type, Token function_name) {
+   ASTNode* parse_function(ParserContext *ctx, Token return_type, Token function_name) {
        // Implementation using helpers
    }
 
