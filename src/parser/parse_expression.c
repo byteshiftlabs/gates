@@ -1,12 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include "token.h"
+#include "tokenizer.h"
+#include "error_handler.h"
 #include "utils.h"
 #include "parse_expression.h"
 #include "symbol_arrays.h"
-#include "symbol_structs.h"
 
 // Buffer size constants
 #define IDENTIFIER_BUFFER_SIZE 128
@@ -16,154 +15,142 @@
 #define FULL_EXPRESSION_BUFFER_SIZE (IDENTIFIER_BUFFER_SIZE + INDEX_EXPRESSION_BUFFER_SIZE + 3)
 #define OPERATOR_COPY_BUFFER_SIZE 8
 
-// Forward declarations for helper functions (mutual recursion with parse_primary)
-static ASTNode* parse_logical_not(FILE *input);
-static ASTNode* parse_bitwise_not(FILE *input);
-static ASTNode* parse_unary_minus(FILE *input);
-
 // Helper: Parse logical NOT operator (!)
-static ASTNode* parse_logical_not(FILE *input)
+static ASTNode* parse_logical_not(ParserContext *ctx)
 {
-    ASTNode *operand = NULL;
-    ASTNode *not_node = NULL;
-    
-    advance(input);
-    operand = parse_primary(input);
+    advance(ctx);
+    ASTNode *operand = parse_primary(ctx);
     if (!operand) {
         return NULL;
     }
     
-    not_node = create_node(NODE_BINARY_OP);
-    not_node->value = strdup("!");
+    ASTNode *not_node = create_node(NODE_BINARY_OP);
+    not_node->value = safe_strdup("!");
     add_child(not_node, operand);
     return not_node;
 }
 
 // Helper: Parse bitwise NOT operator (~)
-static ASTNode* parse_bitwise_not(FILE *input)
+static ASTNode* parse_bitwise_not(ParserContext *ctx)
 {
-    ASTNode *operand = NULL;
-    ASTNode *not_node = NULL;
-    
-    advance(input);
-    operand = parse_primary(input);
+    advance(ctx);
+    ASTNode *operand = parse_primary(ctx);
     if (!operand) {
         return NULL;
     }
     
-    not_node = create_node(NODE_BINARY_OP);
-    not_node->value = strdup("~");
+    ASTNode *not_node = create_node(NODE_BINARY_OP);
+    not_node->value = safe_strdup("~");
     add_child(not_node, operand);
     return not_node;
 }
 
 // Helper: Parse unary minus operator (-)
-static ASTNode* parse_unary_minus(FILE *input)
+static ASTNode* parse_unary_minus(ParserContext *ctx)
 {
-    ASTNode *operand = NULL;
-    ASTNode *result_node = NULL;
-    ASTNode *zero_node = NULL;
-    ASTNode *binary_expr = NULL;
-    char negated_value[NEGATED_VALUE_BUFFER_SIZE] = {0};
-    
-    advance(input);
-    operand = parse_primary(input);
+    advance(ctx);
+    ASTNode *operand = parse_primary(ctx);
     if (!operand) {
         return NULL;
     }
     
     if (operand->type == NODE_EXPRESSION && operand->value) {
+        char negated_value[NEGATED_VALUE_BUFFER_SIZE] = {0};
         snprintf(negated_value, sizeof(negated_value), "-%s", operand->value);
-        result_node = create_node(NODE_EXPRESSION);
-        result_node->value = strdup(negated_value);
+        ASTNode *result_node = create_node(NODE_EXPRESSION);
+        result_node->value = safe_strdup(negated_value);
         free_node(operand);
         return result_node;
     }
     
-    zero_node = create_node(NODE_EXPRESSION);
-    zero_node->value = strdup("0");
-    binary_expr = create_node(NODE_BINARY_EXPR);
-    binary_expr->value = strdup("-");
+    ASTNode *zero_node = create_node(NODE_EXPRESSION);
+    zero_node->value = safe_strdup("0");
+    ASTNode *binary_expr = create_node(NODE_BINARY_EXPR);
+    binary_expr->value = safe_strdup("-");
     add_child(binary_expr, zero_node);
     add_child(binary_expr, operand);
     return binary_expr;
 }
 
 // Helper: Parse parenthesized expression
-static ASTNode* parse_parenthesized_expr(FILE *input)
+static ASTNode* parse_parenthesized_expr(ParserContext *ctx)
 {
-    ASTNode *expr_node = NULL;
+    advance(ctx);
+    ASTNode *expr_node = parse_expression_prec(ctx, PREC_PARENTHESIZED_MIN);
     
-    advance(input);
-    expr_node = parse_expression_prec(input, PREC_PARENTHESIZED_MIN);
-    
-    if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
-        printf("Error (line %d): Expected ')' after expression\n", current_token.line);
-        exit(EXIT_FAILURE);
+    if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected ')' after expression");
+        if (expr_node) {
+            free_node(expr_node);  // Clean up on error
+        }
+        return NULL;
     }
     
     return expr_node;
 }
 
 // Helper: Parse field access (e.g., struct.field.subfield)
-static void parse_field_access(FILE *input, char *identifier_buffer, size_t buffer_size)
+static void parse_field_access(ParserContext *ctx, char *identifier_buffer, size_t buffer_size)
 {
-    while (match(TOKEN_OPERATOR) && strcmp(current_token.value, ".") == 0) {
-        advance(input);
+    while (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, ".") == 0) {
+        advance(ctx);
         
-        if (!match(TOKEN_IDENTIFIER)) {
-            printf("Error (line %d): Expected field name after '.'\n", current_token.line);
-            exit(EXIT_FAILURE);
+        if (!match(ctx, TOKEN_IDENTIFIER)) {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected field name after '.'");
+            return;
         }
         
         safe_append(identifier_buffer, buffer_size, "__");
-        safe_append(identifier_buffer, buffer_size, current_token.value);
-        advance(input);
+        safe_append(identifier_buffer, buffer_size, ctx->current_token.value);
+        advance(ctx);
     }
 }
 
 // Helper: Parse array index expression
-static void parse_array_index(FILE *input, char *index_buffer, size_t buffer_size)
+static void parse_array_index(ParserContext *ctx, char *index_buffer, size_t buffer_size)
 {
     int parenthesis_depth = 0;
     
-    advance(input);
+    advance(ctx);
     
-    while (!match(TOKEN_EOF)) {
-        if (match(TOKEN_BRACKET_CLOSE) && parenthesis_depth == 0) {
+    while (!match(ctx, TOKEN_EOF)) {
+        if (match(ctx, TOKEN_BRACKET_CLOSE) && parenthesis_depth == 0) {
             break;
         }
         
-        if (match(TOKEN_PARENTHESIS_OPEN)) {
+        if (match(ctx, TOKEN_PARENTHESIS_OPEN)) {
             safe_append(index_buffer, buffer_size, "(");
-            advance(input);
+            advance(ctx);
             parenthesis_depth++;
             continue;
         }
         
-        if (match(TOKEN_PARENTHESIS_CLOSE)) {
+        if (match(ctx, TOKEN_PARENTHESIS_CLOSE)) {
             safe_append(index_buffer, buffer_size, ")");
-            advance(input);
+            advance(ctx);
             if (parenthesis_depth > 0) {
                 parenthesis_depth--;
             }
             continue;
         }
         
-        if (current_token.value[0] != '\0') {
-            safe_append(index_buffer, buffer_size, current_token.value);
+        if (ctx->current_token.value[0] != '\0') {
+            safe_append(index_buffer, buffer_size, ctx->current_token.value);
         }
-        advance(input);
+        advance(ctx);
     }
     
-    if (!consume(input, TOKEN_BRACKET_CLOSE)) {
-        printf("Error (line %d): Expected ']' after array index in expression\n", current_token.line);
-        exit(EXIT_FAILURE);
+    if (!consume(ctx, TOKEN_BRACKET_CLOSE)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected ']' after array index in expression");
+        return;
     }
 }
 
 // Helper: Validate array bounds if index is a constant number
-static void validate_array_bounds(const char *identifier_name, const char *index_expr)
+static void validate_array_bounds(const ParserContext *ctx, const char *identifier_name, const char *index_expr)
 {
     int index_value = 0;
     int array_size = 0;
@@ -172,13 +159,16 @@ static void validate_array_bounds(const char *identifier_name, const char *index
         return;
     }
     
-    index_value = atoi(index_expr);
+    if (!safe_strtoi(index_expr, &index_value)) {
+        return;
+    }
     array_size = find_array_size(identifier_name);
     
     if (array_size > 0 && (index_value < 0 || index_value >= array_size)) {
-        printf("Error (line %d): Array index %d out of bounds for '%s' with size %d\n",
-               current_token.line, index_value, identifier_name, array_size);
-        exit(EXIT_FAILURE);
+        log_error(ERROR_CATEGORY_SEMANTIC, ctx->current_token.line,
+                  "Array index %d out of bounds for '%s' with size %d",
+                  index_value, identifier_name, array_size);
+        return;
     }
 }
 
@@ -192,33 +182,33 @@ static void validate_array_bounds(const char *identifier_name, const char *index
  * This function consumes the opening parenthesis, parses comma-separated arguments,
  * and expects a closing parenthesis.
  * 
- * @param input         Input file stream
+ * @param ctx           Parser context
  * @param function_name Name of the function being called (for error messages)
  * @return              NODE_FUNC_CALL node with arguments as children
  */
-ASTNode* parse_function_call_args(FILE *input, const char *function_name)
+ASTNode* parse_function_call_args(ParserContext *ctx, const char *function_name)
 {
     ASTNode *call_node = NULL;
     ASTNode *arg_node = NULL;
     
     call_node = create_node(NODE_FUNC_CALL);
-    call_node->value = strdup(function_name);
+    call_node->value = safe_strdup(function_name);
     
     // Consume opening parenthesis
-    advance(input);
+    advance(ctx);
     
     // Parse zero or more comma-separated arguments
-    while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF))
+    while (!match(ctx, TOKEN_PARENTHESIS_CLOSE) && !match(ctx, TOKEN_EOF))
     {
-        arg_node = parse_expression_prec(input, PREC_TOP_LEVEL_MIN);
+        arg_node = parse_expression_prec(ctx, PREC_TOP_LEVEL_MIN);
         if (arg_node)
         {
             add_child(call_node, arg_node);
         }
         
-        if (match(TOKEN_COMMA))
+        if (match(ctx, TOKEN_COMMA))
         {
-            advance(input);
+            advance(ctx);
             continue;
         }
         else
@@ -227,11 +217,13 @@ ASTNode* parse_function_call_args(FILE *input, const char *function_name)
         }
     }
     
-    if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
+    if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE))
     {
-        printf("Error (line %d): Expected ')' after function call arguments for '%s'\n",
-               current_token.line, function_name);
-        exit(EXIT_FAILURE);
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected ')' after function call arguments for '%s'",
+                  function_name);
+        free_node(call_node);
+        return NULL;
     }
     
     return call_node;
@@ -239,134 +231,135 @@ ASTNode* parse_function_call_args(FILE *input, const char *function_name)
 
 /**
  * Parses a function call with its arguments.
- * 
- * Syntax: function_name(arg1, arg2, ..., argN)
- * 
- * The opening parenthesis should already be matched before calling this function.
- * This function consumes the opening parenthesis, parses comma-separated arguments,
- * and expects a closing parenthesis.
- * 
- * @param input         Input file stream
- * @param function_name Name of the function being called
- * @return              NODE_FUNC_CALL node with arguments as children
  */
-static ASTNode* parse_function_call(FILE *input, const char *function_name)
+static ASTNode* parse_function_call(ParserContext *ctx, const char *function_name)
 {
-    return parse_function_call_args(input, function_name);
+    return parse_function_call_args(ctx, function_name);
 }
 
-// Helper: Parse identifier with optional field access, array indexing, or function call
-static ASTNode* parse_identifier(FILE *input)
+// Build an array-access expression node: identifier[index].
+// Validates bounds at parse time when the index is a compile-time constant.
+static ASTNode* parse_array_access(ParserContext *ctx, const char *identifier_name)
 {
-    ASTNode *identifier_node = NULL;
-    char identifier_name[IDENTIFIER_BUFFER_SIZE] = {0};
     char index_expression[INDEX_EXPRESSION_BUFFER_SIZE] = {0};
     char full_expression[FULL_EXPRESSION_BUFFER_SIZE] = {0};
     
-    safe_copy(identifier_name, sizeof(identifier_name), current_token.value, sizeof(identifier_name) - 1);
-    advance(input);
-    
-    // Check for function call: identifier(args)
-    if (match(TOKEN_PARENTHESIS_OPEN))
-    {
-        return parse_function_call(input, identifier_name);
+    parse_array_index(ctx, index_expression, sizeof(index_expression));
+    if (has_errors()) {
+        return NULL;
     }
     
-    // Handle field access (e.g., struct.field)
-    parse_field_access(input, identifier_name, sizeof(identifier_name));
+    ASTNode *node = create_node(NODE_EXPRESSION);
+    snprintf(full_expression, sizeof(full_expression), "%s[%s]", identifier_name, index_expression);
+    node->value = safe_strdup(full_expression);
     
-    // Handle array indexing
-    if (match(TOKEN_BRACKET_OPEN))
+    validate_array_bounds(ctx, identifier_name, index_expression);
+    if (has_errors()) {
+        free_node(node);
+        return NULL;
+    }
+    return node;
+}
+
+// Identifier dispatch: function call, struct field access, array indexing, or plain variable.
+// Each access pattern is delegated to a dedicated helper so this stays a flat dispatcher
+// and new access patterns (e.g. pointer dereference) can be added without nesting.
+static ASTNode* parse_identifier(ParserContext *ctx)
+{
+    char identifier_name[IDENTIFIER_BUFFER_SIZE] = {0};
+    
+    safe_copy(identifier_name, sizeof(identifier_name), ctx->current_token.value, sizeof(identifier_name) - 1);
+    advance(ctx);
+    
+    if (match(ctx, TOKEN_PARENTHESIS_OPEN))
     {
-        parse_array_index(input, index_expression, sizeof(index_expression));
-        
-        identifier_node = create_node(NODE_EXPRESSION);
-        snprintf(full_expression, sizeof(full_expression), "%s[%s]", identifier_name, index_expression);
-        identifier_node->value = strdup(full_expression);
-        
-        validate_array_bounds(identifier_name, index_expression);
-        return identifier_node;
+        return parse_function_call(ctx, identifier_name);
     }
     
-    // Simple identifier
-    identifier_node = create_node(NODE_EXPRESSION);
-    identifier_node->value = strdup(identifier_name);
+    parse_field_access(ctx, identifier_name, sizeof(identifier_name));
+    if (has_errors()) {
+        return NULL;
+    }
+    
+    if (match(ctx, TOKEN_BRACKET_OPEN))
+    {
+        return parse_array_access(ctx, identifier_name);
+    }
+    
+    ASTNode *identifier_node = create_node(NODE_EXPRESSION);
+    identifier_node->value = safe_strdup(identifier_name);
     return identifier_node;
 }
 
 // Helper: Parse number literal
-static ASTNode* parse_number(FILE *input)
+static ASTNode* parse_number(ParserContext *ctx)
 {
     ASTNode *number_node = create_node(NODE_EXPRESSION);
-    number_node->value = strdup(current_token.value);
-    advance(input);
+    number_node->value = safe_strdup(ctx->current_token.value);
+    advance(ctx);
     return number_node;
 }
 
 // Primary: identifiers, numbers, unary minus, logical/bitwise NOT, parentheses, field & array access
-ASTNode* parse_primary(FILE *input)
+ASTNode* parse_primary(ParserContext *ctx)
 {
     // Logical NOT operator
-    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "!") == 0) {
-        return parse_logical_not(input);
+    if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "!") == 0) {
+        return parse_logical_not(ctx);
     }
     
     // Bitwise NOT operator
-    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "~") == 0) {
-        return parse_bitwise_not(input);
+    if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "~") == 0) {
+        return parse_bitwise_not(ctx);
     }
     
     // Unary minus operator
-    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "-") == 0) {
-        return parse_unary_minus(input);
+    if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "-") == 0) {
+        return parse_unary_minus(ctx);
     }
     
     // Parenthesized expression
-    if (match(TOKEN_PARENTHESIS_OPEN)) {
-        return parse_parenthesized_expr(input);
+    if (match(ctx, TOKEN_PARENTHESIS_OPEN)) {
+        return parse_parenthesized_expr(ctx);
     }
     
     // Identifier (with optional field access and array indexing)
-    if (match(TOKEN_IDENTIFIER)) {
-        return parse_identifier(input);
+    if (match(ctx, TOKEN_IDENTIFIER)) {
+        return parse_identifier(ctx);
     }
     
     // Number literal
-    if (match(TOKEN_NUMBER)) {
-        return parse_number(input);
+    if (match(ctx, TOKEN_NUMBER)) {
+        return parse_number(ctx);
     }
     
     return NULL;
 }
 
-ASTNode* parse_expression_prec(FILE *input, int min_prec)
+ASTNode* parse_expression_prec(ParserContext *ctx, int min_prec)
 {
-    ASTNode *left_operand = NULL;
-    ASTNode *right_operand = NULL;
-    ASTNode *binary_expr = NULL;
-    const char *operator = NULL;
-    int operator_precedence = 0;
-    char operator_copy[OPERATOR_COPY_BUFFER_SIZE] = {0};
-
-    left_operand = parse_primary(input);
+    ASTNode *left_operand = parse_primary(ctx);
     if (!left_operand) {
         return NULL;
     }
-    while (match(TOKEN_OPERATOR)) {
-        operator = current_token.value;
-        operator_precedence = get_precedence(operator);
+    while (match(ctx, TOKEN_OPERATOR)) {
+        const char *op = ctx->current_token.value;
+        int operator_precedence = get_precedence(op);
         if (operator_precedence < min_prec) {
             break;
         }
-        safe_copy(operator_copy, sizeof(operator_copy), operator, sizeof(operator_copy) - 1);
-        advance(input);
-        right_operand = parse_expression_prec(input, operator_precedence + 1);
+        char operator_copy[OPERATOR_COPY_BUFFER_SIZE] = {0};
+        safe_copy(operator_copy, sizeof(operator_copy), op, sizeof(operator_copy) - 1);
+        advance(ctx);
+        ASTNode *right_operand = parse_expression_prec(ctx, operator_precedence + 1);
         if (!right_operand) {
-            printf("Error (line %d): Expected right operand after operator '%s'\n", current_token.line, operator_copy);
-            exit(EXIT_FAILURE);
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected right operand after operator '%s'", operator_copy);
+            free_node(left_operand);
+            return NULL;
         }
-        binary_expr = create_node(NODE_BINARY_EXPR);
-        binary_expr->value = strdup(operator_copy);
+        ASTNode *binary_expr = create_node(NODE_BINARY_EXPR);
+        binary_expr->value = safe_strdup(operator_copy);
         add_child(binary_expr, left_operand);
         add_child(binary_expr, right_operand);
         left_operand = binary_expr;
@@ -374,7 +367,7 @@ ASTNode* parse_expression_prec(FILE *input, int min_prec)
     return left_operand;
 }
 
-ASTNode* parse_expression(FILE *input)
+ASTNode* parse_expression(ParserContext *ctx)
 { 
-    return parse_expression_prec(input, PREC_TOP_LEVEL_MIN);
+    return parse_expression_prec(ctx, PREC_TOP_LEVEL_MIN);
 }
