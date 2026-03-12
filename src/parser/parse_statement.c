@@ -1,18 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include "parse_statement.h"
 #include "parse_expression.h"
 #include "parse_control_flow.h"
-#include "symbol_structs.h"
+#include "parse_for.h"
 #include "symbol_arrays.h"
 #include "utils.h"
-#include "parse.h" // create_node/add_child
-#include "token.h"
+#include "error_handler.h"
+#include "tokenizer.h"
 
 // Constants
-#define MAX_ARRAYS 128
 #define ARRAY_SIZE_BUFFER_SIZE 256
 #define LHS_BUFFER_SIZE 1024
 #define INDEX_BUFFER_SIZE 512
@@ -20,192 +18,188 @@
 #define GENERAL_BUFFER_SIZE 1024
 #define INITIAL_PARENTHESIS_DEPTH 0
 
-extern Token current_token;
-extern int g_array_count;
-extern ArrayInfo g_arrays[MAX_ARRAYS];
-
-// Forward declarations
-static ASTNode* parse_variable_declaration(FILE *input, Token type_token);
-static ASTNode* parse_assignment_or_expression(FILE *input);
-static ASTNode* parse_return_statement(FILE *input);
-
 // Helper: Parse array or struct initializer list
-static ASTNode* parse_initializer_list(FILE *input, int is_array)
+static ASTNode* parse_initializer_list(ParserContext *ctx, int is_array)
 {
-    ASTNode *init_list = NULL;
-    ASTNode *elem = NULL;
+    advance(ctx);
+    ASTNode *init_list = create_node(NODE_EXPRESSION);
+    init_list->value = safe_strdup(is_array ? "array_init" : "struct_init");
     
-    advance(input);
-    init_list = create_node(NODE_EXPRESSION);
-    init_list->value = strdup(is_array ? "array_init" : "struct_init");
-    
-    while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
-        if (match(TOKEN_NUMBER) || match(TOKEN_IDENTIFIER)) {
-            elem = create_node(NODE_EXPRESSION);
-            elem->value = strdup(current_token.value);
+    while (!match(ctx, TOKEN_BRACE_CLOSE) && !match(ctx, TOKEN_EOF) && !has_errors()) {
+        if (match(ctx, TOKEN_NUMBER) || match(ctx, TOKEN_IDENTIFIER)) {
+            ASTNode *elem = create_node(NODE_EXPRESSION);
+            elem->value = safe_strdup(ctx->current_token.value);
             add_child(init_list, elem);
-            advance(input);
-        } else if (match(TOKEN_COMMA)) {
-            advance(input);
-        } else {
-            advance(input);
         }
+        advance(ctx);
     }
     
-    if (!consume(input, TOKEN_BRACE_CLOSE)) {
-        printf("Error (line %d): Expected '}' after %s initializer\n", 
-               current_token.line, is_array ? "array" : "struct");
-        exit(EXIT_FAILURE);
+    if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected '}' after %s initializer",
+                  is_array ? "array" : "struct");
+        free_node(init_list);
+        return NULL;
     }
     
     return init_list;
 }
 
 // Helper: Parse variable declaration with optional initialization
-static ASTNode* parse_variable_declaration(FILE *input, Token type_token)
+static ASTNode* parse_variable_declaration(ParserContext *ctx, Token type_token)
 {
-    Token name_token = {0};
-    ASTNode *var_decl_node = NULL;
-    ASTNode *init_expr = NULL;
-    ASTNode *init_list = NULL;
     int is_struct = 0;
     int is_array = 0;
-    char arr_size_buf[ARRAY_SIZE_BUFFER_SIZE] = {0};
-    char buf[GENERAL_BUFFER_SIZE] = {0};
     
     // Check if it's a struct type
     if (strcmp(type_token.value, "struct") == 0) {
-        if (!match(TOKEN_IDENTIFIER)) {
-            printf("Error (line %d): Expected struct name after 'struct'\n", current_token.line);
-            exit(EXIT_FAILURE);
+        if (!match(ctx, TOKEN_IDENTIFIER)) {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected struct name after 'struct'");
+            return NULL;
         }
-        type_token = current_token;
-        advance(input);
+        type_token = ctx->current_token;
+        advance(ctx);
         is_struct = 1;
     }
     
     // Get variable name
-    if (!match(TOKEN_IDENTIFIER)) {
-        printf("Error (line %d): Expected variable name after type\n", current_token.line);
-        exit(EXIT_FAILURE);
+    if (!match(ctx, TOKEN_IDENTIFIER)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected variable name after type");
+        return NULL;
     }
     
-    name_token = current_token;
-    advance(input);
+    Token name_token = ctx->current_token;
+    advance(ctx);
     
-    var_decl_node = create_node(NODE_VAR_DECL);
+    ASTNode *var_decl_node = create_node(NODE_VAR_DECL);
     var_decl_node->token = type_token;
-    var_decl_node->value = strdup(name_token.value);
+    var_decl_node->value = safe_strdup(name_token.value);
     
     // Handle array declaration
-    if (match(TOKEN_BRACKET_OPEN)) {
+    if (match(ctx, TOKEN_BRACKET_OPEN)) {
         is_array = 1;
-        advance(input);
+        advance(ctx);
         
-        if (!match(TOKEN_NUMBER)) {
-            printf("Error (line %d): Expected array size after '['\n", current_token.line);
-            exit(EXIT_FAILURE);
+        if (!match(ctx, TOKEN_NUMBER)) {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected array size after '['");
+            free_node(var_decl_node);
+            return NULL;
         }
         
-        snprintf(arr_size_buf, sizeof(arr_size_buf), "%s", current_token.value);
-        snprintf(buf, sizeof(buf), "%s[%s]", name_token.value, current_token.value);
+        char arr_size_buf[ARRAY_SIZE_BUFFER_SIZE] = {0};
+        char buf[GENERAL_BUFFER_SIZE] = {0};
+        snprintf(arr_size_buf, sizeof(arr_size_buf), "%s", ctx->current_token.value);
+        snprintf(buf, sizeof(buf), "%s[%s]", name_token.value, ctx->current_token.value);
         free(var_decl_node->value);
-        var_decl_node->value = strdup(buf);
-        advance(input);
+        var_decl_node->value = safe_strdup(buf);
+        advance(ctx);
         
-        register_array(name_token.value, atoi(arr_size_buf));
+        {
+            int arr_size_val = 0;
+            if (!safe_strtoi(arr_size_buf, &arr_size_val)) {
+                log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                          "Invalid array size '%s'", arr_size_buf);
+                free_node(var_decl_node);
+                return NULL;
+            }
+            register_array(name_token.value, arr_size_val);
+        }
         
-        if (!consume(input, TOKEN_BRACKET_CLOSE)) {
-            printf("Error (line %d): Expected ']' after array size\n", current_token.line);
-            exit(EXIT_FAILURE);
+        if (!consume(ctx, TOKEN_BRACKET_CLOSE)) {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected ']' after array size");
+            free_node(var_decl_node);
+            return NULL;
         }
     }
     
     // Handle initialization
-    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
-        advance(input);
+    if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "=") == 0) {
+        advance(ctx);
         
-        if (is_array && match(TOKEN_BRACE_OPEN)) {
-            init_list = parse_initializer_list(input, 1);
+        if (is_array && match(ctx, TOKEN_BRACE_OPEN)) {
+            ASTNode *init_list = parse_initializer_list(ctx, 1);
             add_child(var_decl_node, init_list);
-        } else if (is_struct && match(TOKEN_BRACE_OPEN)) {
-            init_list = parse_initializer_list(input, 0);
+        } else if (is_struct && match(ctx, TOKEN_BRACE_OPEN)) {
+            ASTNode *init_list = parse_initializer_list(ctx, 0);
             add_child(var_decl_node, init_list);
         } else {
-            init_expr = parse_expression(input);
+            ASTNode *init_expr = parse_expression(ctx);
             if (init_expr) {
                 add_child(var_decl_node, init_expr);
             }
-            while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
-                advance(input);
+            while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF)) {
+                advance(ctx);
             }
         }
     }
     
-    if (!consume(input, TOKEN_SEMICOLON)) {
-        printf("Error (line %d): Expected ';' after variable declaration\n", current_token.line);
-        exit(EXIT_FAILURE);
+    if (!consume(ctx, TOKEN_SEMICOLON)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected ';' after variable declaration");
+        free_node(var_decl_node);
+        return NULL;
     }
     
     return var_decl_node;
 }
 
 // Helper: Parse left-hand side expression (identifier with optional field access and array indexing)
-static void parse_lhs_expression(FILE *input, Token lhs_token, char *lhs_buf, size_t lhs_buf_size,
+static void parse_lhs_expression(ParserContext *ctx, Token lhs_token, char *lhs_buf, size_t lhs_buf_size,
                                   char *idx_buf, size_t idx_buf_size, char *base_name, size_t base_name_size)
 {
-    int paren_depth = INITIAL_PARENTHESIS_DEPTH;
-    int arr_size = 0;
-    int idx_val = 0;
-    size_t len = 0;
-    const char *delim = NULL;
-    
     snprintf(lhs_buf, lhs_buf_size, "%s", lhs_token.value);
     
     // Handle field access (struct.field)
-    while (match(TOKEN_OPERATOR) && current_token.value[0] != '\0' && strcmp(current_token.value, ".") == 0) {
-        advance(input);
-        if (!match(TOKEN_IDENTIFIER)) {
-            printf("Error (line %d): Expected field name after '.' in assignment\n", current_token.line);
-            exit(EXIT_FAILURE);
+    while (match(ctx, TOKEN_OPERATOR) && ctx->current_token.value[0] != '\0' && strcmp(ctx->current_token.value, ".") == 0) {
+        advance(ctx);
+        if (!match(ctx, TOKEN_IDENTIFIER)) {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected field name after '.' in assignment");
+            return;
         }
         safe_append(lhs_buf, lhs_buf_size, "__");
-        safe_append(lhs_buf, lhs_buf_size, current_token.value);
-        advance(input);
+        safe_append(lhs_buf, lhs_buf_size, ctx->current_token.value);
+        advance(ctx);
     }
     
     // Handle array indexing
-    if (match(TOKEN_BRACKET_OPEN)) {
-        advance(input);
+    if (match(ctx, TOKEN_BRACKET_OPEN)) {
+        advance(ctx);
         memset(idx_buf, 0, idx_buf_size);
+        int paren_depth = INITIAL_PARENTHESIS_DEPTH;
         
-        while (!match(TOKEN_EOF)) {
-            if (match(TOKEN_BRACKET_CLOSE) && paren_depth == 0) {
+        while (!match(ctx, TOKEN_EOF)) {
+            if (match(ctx, TOKEN_BRACKET_CLOSE) && paren_depth == 0) {
                 break;
             }
-            if (match(TOKEN_PARENTHESIS_OPEN)) {
+            if (match(ctx, TOKEN_PARENTHESIS_OPEN)) {
                 safe_append(idx_buf, idx_buf_size, "(");
-                advance(input);
+                advance(ctx);
                 paren_depth++;
                 continue;
             }
-            if (match(TOKEN_PARENTHESIS_CLOSE)) {
+            if (match(ctx, TOKEN_PARENTHESIS_CLOSE)) {
                 safe_append(idx_buf, idx_buf_size, ")");
-                advance(input);
+                advance(ctx);
                 if (paren_depth > 0) {
                     paren_depth--;
                 }
                 continue;
             }
-            if (current_token.value[0] != '\0') {
-                safe_append(idx_buf, idx_buf_size, current_token.value);
+            if (ctx->current_token.value[0] != '\0') {
+                safe_append(idx_buf, idx_buf_size, ctx->current_token.value);
             }
-            advance(input);
+            advance(ctx);
         }
         
-        if (!consume(input, TOKEN_BRACKET_CLOSE)) {
-            printf("Error (line %d): Expected ']' after array index in assignment\n", current_token.line);
-            exit(EXIT_FAILURE);
+        if (!consume(ctx, TOKEN_BRACKET_CLOSE)) {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected ']' after array index in assignment");
+            return;
         }
         
         safe_append(lhs_buf, lhs_buf_size, "[");
@@ -215,84 +209,87 @@ static void parse_lhs_expression(FILE *input, Token lhs_token, char *lhs_buf, si
         // Validate array bounds
         if (is_number_str(idx_buf)) {
             memset(base_name, 0, base_name_size);
-            delim = strstr(lhs_buf, "__");
-            len = delim ? (size_t)(delim - lhs_buf) : strcspn(lhs_buf, "[");
+            const char *delim = strstr(lhs_buf, "__");
+            size_t len = delim ? (size_t)(delim - lhs_buf) : strcspn(lhs_buf, "[");
             if (len >= base_name_size) {
                 len = base_name_size - 1;
             }
             safe_copy(base_name, base_name_size, lhs_buf, len);
-            arr_size = find_array_size(base_name);
+            int arr_size = find_array_size(base_name);
             if (arr_size > 0) {
-                idx_val = atoi(idx_buf);
+                int idx_val = 0;
+                if (!safe_strtoi(idx_buf, &idx_val)) {
+                    return;
+                }
                 if (idx_val < 0 || idx_val >= arr_size) {
-                    printf("Error (line %d): Array index %d out of bounds for '%s' with size %d\n",
-                           current_token.line, idx_val, base_name, arr_size);
-                    exit(EXIT_FAILURE);
+                    log_error(ERROR_CATEGORY_SEMANTIC, ctx->current_token.line,
+                              "Array index %d out of bounds for '%s' with size %d",
+                              idx_val, base_name, arr_size);
+                    return;
                 }
             }
         }
     }
 }
 
-// Helper: Parse assignment statement or expression statement
 // Helper: Parse function call as statement (standalone call that doesn't use return value)
-static ASTNode* parse_standalone_function_call(FILE *input, const char *function_name)
+static ASTNode* parse_standalone_function_call(ParserContext *ctx, const char *function_name)
 {
-    ASTNode *func_call_node = NULL;
-    
     // Use shared helper to parse function call arguments
-    func_call_node = parse_function_call_args(input, function_name);
+    ASTNode *func_call_node = parse_function_call_args(ctx, function_name);
     
     // Expect semicolon after statement
-    if (!consume(input, TOKEN_SEMICOLON))
+    if (!consume(ctx, TOKEN_SEMICOLON))
     {
-        printf("Error (line %d): Expected ';' after function call\n", current_token.line);
-        exit(EXIT_FAILURE);
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected ';' after function call");
+        return NULL;
     }
     
     return func_call_node;
 }
 
-static ASTNode* parse_assignment_or_expression(FILE *input)
+static ASTNode* parse_assignment_or_expression(ParserContext *ctx)
 {
-    Token lhs_token = current_token;
-    ASTNode *assign_node = NULL;
-    ASTNode *lhs_expr = NULL;
-    ASTNode *rhs_node = NULL;
+    Token lhs_token = ctx->current_token;
     char lhs_buf[LHS_BUFFER_SIZE] = {0};
     char idx_buf[INDEX_BUFFER_SIZE] = {0};
     char base_name[BASE_NAME_BUFFER_SIZE] = {0};
     
-    advance(input);
+    advance(ctx);
     
     // Check for function call: identifier(...)
-    if (match(TOKEN_PARENTHESIS_OPEN))
+    if (match(ctx, TOKEN_PARENTHESIS_OPEN))
     {
-        return parse_standalone_function_call(input, lhs_token.value);
+        return parse_standalone_function_call(ctx, lhs_token.value);
     }
     
-    parse_lhs_expression(input, lhs_token, lhs_buf, sizeof(lhs_buf),
+    parse_lhs_expression(ctx, lhs_token, lhs_buf, sizeof(lhs_buf),
                         idx_buf, sizeof(idx_buf), base_name, sizeof(base_name));
+    if (has_errors()) {
+        return NULL;
+    }
     
-    lhs_expr = create_node(NODE_EXPRESSION);
-    lhs_expr->value = strdup(lhs_buf);
+    ASTNode *lhs_expr = create_node(NODE_EXPRESSION);
+    lhs_expr->value = safe_strdup(lhs_buf);
     
-    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0)
+    if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "=") == 0)
     {
-        advance(input);
-        assign_node = create_node(NODE_ASSIGNMENT);
+        advance(ctx);
+        ASTNode *assign_node = create_node(NODE_ASSIGNMENT);
         add_child(assign_node, lhs_expr);
         
-        rhs_node = parse_expression(input);
+        ASTNode *rhs_node = parse_expression(ctx);
         if (rhs_node)
         {
             add_child(assign_node, rhs_node);
         }
         
-        if (!consume(input, TOKEN_SEMICOLON))
+        if (!consume(ctx, TOKEN_SEMICOLON))
         {
-            printf("Error (line %d): Expected ';' after assignment\n", current_token.line);
-            exit(EXIT_FAILURE);
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected ';' after assignment");
+            return NULL;
         }
         
         return assign_node;
@@ -300,13 +297,13 @@ static ASTNode* parse_assignment_or_expression(FILE *input)
     else
     {
         // Not an assignment, skip to semicolon
-        while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF))
+        while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF))
         {
-            advance(input);
+            advance(ctx);
         }
-        if (match(TOKEN_SEMICOLON))
+        if (match(ctx, TOKEN_SEMICOLON))
         {
-            advance(input);
+            advance(ctx);
         }
         free_node(lhs_expr);
         return NULL;
@@ -314,43 +311,36 @@ static ASTNode* parse_assignment_or_expression(FILE *input)
 }
 
 // Helper: Parse return statement
-static ASTNode* parse_return_statement(FILE *input)
+static ASTNode* parse_return_statement(ParserContext *ctx)
 {
     ASTNode *stmt_node = create_node(NODE_STATEMENT);
-    ASTNode *return_expr = NULL;
+    stmt_node->token = ctx->current_token;
+    advance(ctx);
     
-    stmt_node->token = current_token;
-    advance(input);
-    
-    return_expr = parse_expression(input);
+    ASTNode *return_expr = parse_expression(ctx);
     if (return_expr) {
         add_child(stmt_node, return_expr);
     }
     
-    if (!consume(input, TOKEN_SEMICOLON)) {
-        printf("Error (line %d): Expected ';' after return statement\n", current_token.line);
-        exit(EXIT_FAILURE);
+    if (!consume(ctx, TOKEN_SEMICOLON)) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected ';' after return statement");
+        return NULL;
     }
     
     return stmt_node;
 }
 
-ASTNode* parse_statement(FILE *input)
+ASTNode* parse_statement(ParserContext *ctx)
 {
-    ASTNode *stmt_node = NULL;
-    ASTNode *sub_statement = NULL;
-    
-    stmt_node = create_node(NODE_STATEMENT);
+    ASTNode *stmt_node = create_node(NODE_STATEMENT);
     
     // Variable declaration
-    if (match(TOKEN_KEYWORD) && (strcmp(current_token.value, "int") == 0 ||
-                                  strcmp(current_token.value, "float") == 0 ||
-                                  strcmp(current_token.value, "char") == 0 ||
-                                  strcmp(current_token.value, "double") == 0 ||
-                                  strcmp(current_token.value, "struct") == 0)) {
-        Token type_token = current_token;
-        advance(input);
-        sub_statement = parse_variable_declaration(input, type_token);
+    if (match(ctx, TOKEN_KEYWORD) && (is_type_keyword(ctx->current_token.value) ||
+                                  strcmp(ctx->current_token.value, "struct") == 0)) {
+        Token type_token = ctx->current_token;
+        advance(ctx);
+        ASTNode *sub_statement = parse_variable_declaration(ctx, type_token);
         if (sub_statement) {
             add_child(stmt_node, sub_statement);
         }
@@ -358,8 +348,8 @@ ASTNode* parse_statement(FILE *input)
     }
     
     // Assignment or expression statement
-    if (match(TOKEN_IDENTIFIER)) {
-        sub_statement = parse_assignment_or_expression(input);
+    if (match(ctx, TOKEN_IDENTIFIER)) {
+        ASTNode *sub_statement = parse_assignment_or_expression(ctx);
         if (sub_statement) {
             add_child(stmt_node, sub_statement);
         }
@@ -367,13 +357,14 @@ ASTNode* parse_statement(FILE *input)
     }
     
     // Return statement
-    if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "return") == 0) {
-        return parse_return_statement(input);
+    if (match(ctx, TOKEN_KEYWORD) && strcmp(ctx->current_token.value, "return") == 0) {
+        free_node(stmt_node);
+        return parse_return_statement(ctx);
     }
     
     // If statement
-    if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "if") == 0) {
-        sub_statement = parse_if_statement(input);
+    if (match(ctx, TOKEN_KEYWORD) && strcmp(ctx->current_token.value, "if") == 0) {
+        ASTNode *sub_statement = parse_if_statement(ctx);
         if (sub_statement) {
             add_child(stmt_node, sub_statement);
         }
@@ -381,8 +372,8 @@ ASTNode* parse_statement(FILE *input)
     }
     
     // While statement
-    if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "while") == 0) {
-        sub_statement = parse_while_statement(input);
+    if (match(ctx, TOKEN_KEYWORD) && strcmp(ctx->current_token.value, "while") == 0) {
+        ASTNode *sub_statement = parse_while_statement(ctx);
         if (sub_statement) {
             add_child(stmt_node, sub_statement);
         }
@@ -390,8 +381,8 @@ ASTNode* parse_statement(FILE *input)
     }
     
     // For statement
-    if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "for") == 0) {
-        sub_statement = parse_for_statement(input);
+    if (match(ctx, TOKEN_KEYWORD) && strcmp(ctx->current_token.value, "for") == 0) {
+        ASTNode *sub_statement = parse_for_statement(ctx);
         if (sub_statement) {
             add_child(stmt_node, sub_statement);
         }
@@ -399,9 +390,9 @@ ASTNode* parse_statement(FILE *input)
     }
     
     // Break statement
-    if ((match(TOKEN_KEYWORD) && strcmp(current_token.value, "break") == 0) ||
-        (match(TOKEN_IDENTIFIER) && strcmp(current_token.value, "break") == 0)) {
-        sub_statement = parse_break_statement(input);
+    if ((match(ctx, TOKEN_KEYWORD) && strcmp(ctx->current_token.value, "break") == 0) ||
+        (match(ctx, TOKEN_IDENTIFIER) && strcmp(ctx->current_token.value, "break") == 0)) {
+        ASTNode *sub_statement = parse_break_statement(ctx);
         if (sub_statement) {
             add_child(stmt_node, sub_statement);
         }
@@ -409,9 +400,9 @@ ASTNode* parse_statement(FILE *input)
     }
     
     // Continue statement
-    if ((match(TOKEN_KEYWORD) && strcmp(current_token.value, "continue") == 0) ||
-        (match(TOKEN_IDENTIFIER) && strcmp(current_token.value, "continue") == 0)) {
-        sub_statement = parse_continue_statement(input);
+    if ((match(ctx, TOKEN_KEYWORD) && strcmp(ctx->current_token.value, "continue") == 0) ||
+        (match(ctx, TOKEN_IDENTIFIER) && strcmp(ctx->current_token.value, "continue") == 0)) {
+        ASTNode *sub_statement = parse_continue_statement(ctx);
         if (sub_statement) {
             add_child(stmt_node, sub_statement);
         }
@@ -419,11 +410,11 @@ ASTNode* parse_statement(FILE *input)
     }
     
     // Unknown/empty statement - skip to semicolon
-    while (!match(TOKEN_SEMICOLON) && !match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
-        advance(input);
+    while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_BRACE_CLOSE) && !match(ctx, TOKEN_EOF)) {
+        advance(ctx);
     }
-    if (match(TOKEN_SEMICOLON)) {
-        advance(input);
+    if (match(ctx, TOKEN_SEMICOLON)) {
+        advance(ctx);
     }
     
     return stmt_node;
