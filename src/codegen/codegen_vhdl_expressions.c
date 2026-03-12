@@ -17,6 +17,10 @@ static void generate_node(ASTNode *node, FILE *output_file);
 // -------------------------------------------------------------
 void generate_binary_expression(ASTNode *node, FILE *output_file)
 {
+    if (!node || node->num_children < 2) {
+        return;
+    }
+
     const char *operator = node->value;
     const char *normalized_operator = operator;
     ASTNode *left_operand  = node->children[FIRST_CHILD_INDEX];
