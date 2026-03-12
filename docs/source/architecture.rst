@@ -89,5 +89,5 @@ Testing Workflow
 1. Configure with ``-DENABLE_TESTING=ON`` (default).
 2. Build and run tests: ``cmake --build build --target test_all``.
 3. Inspect or filter tests: ``ctest -N`` / ``ctest -R <regex>``.
-4. Use direct filtering: ``./build/compi_tests --gtest_filter=TokenTests.*``.
+4. Use direct filtering: ``./build/gates_tests --gtest_filter=TokenTests.*``.
 
