@@ -1,8 +1,3 @@
-.. compi documentation master file, created by
-   sphinx-quickstart on Sat Aug  9 14:10:06 2025.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Welcome to Compi's documentation!
 =================================
 
@@ -20,105 +15,35 @@ Welcome to Compi's documentation!
    contributing
    known_issues
    license
-   
+
+Introduction
+------------
+
+Compi is a minimal C-to-VHDL translator. It parses a subset of C and generates
+synthesizable VHDL with clock/reset ports, signals, and synchronous processes.
+
 Features
 --------
 
-- Lexical analysis of C code (tokenizer)
-- Parsing of function declarations, parameter lists, variable declarations, assignments, return statements, and if/else if/else control flow
-- Expression parsing with proper precedence and associativity:
-    - Arithmetic: + - * /
-    - Shifts: << >>
-    - Bitwise: & | ^
-    - Comparisons: == != < <= > >=
-    - Logical: && || and unary !
-    - Unary minus: -x
-- Abstract Syntax Tree (AST) construction with improved visualization
-- Generation of VHDL entities and architecture skeletons
-- Automatic type mapping between C types (int, float, double, char) and VHDL types
-- Example C files for testing in examples/
-- Sphinx documentation in docs/ with Read the Docs theme
-- Array support:
-   - Parse and generate VHDL for C arrays of types int, float, double, and char
-   - Array declaration and initialization: int arr[3] = {1,2,3};, float arr[2] = {1.0, 2.5};, char arr[4] = {'a','b','c','d'};
-   - Array access and assignment: arr[i] = x;, y = arr[j];
-   - Returning array elements: return arr[i];
-   - Full index expressions inside brackets: arr[i+1], arr[(j<<1)+k], return arr[2*i]
-   - Type mapping:
-      - int[] → std_logic_vector(31 downto 0)
-      - float[], double[] → real
-      - char[] → character
-   - Initializers are converted to valid VHDL literals for each type
-   - Array element access and assignment use VHDL syntax: arr(i)
+- Recursive-descent parser with full operator precedence (12 levels)
+- Control flow: ``if/else``, ``while``, ``for``, ``break``, ``continue``
+- Functions with return value propagation, structs with field access, arrays with indexing
+- VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
+- Multi-level error diagnostics with colored output (error/warning/note across 5 categories)
+- 62 unit, integration, and edge case tests (GoogleTest), Valgrind clean
 
-- For loop and nested for loop support
-   - Parse and generate VHDL for C-style for (init; cond; incr) { ... } loops
-   - Supports variable declarations and assignments in loop headers
-   - Nested for loops are parsed and translated to VHDL
-   - VHDL codegen desugars for-loops into initialization, while loop, and increment logic
-   - Example:
+See :doc:`examples` for C-to-VHDL translation samples and :doc:`modules` for the
+complete source code reference.
 
-    .. code-block:: c
+Debug Build
+-----------
 
-      int for_loop_sum(int n) {
-         int sum = 0;
-         for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n; j++) {
-               sum = sum + i + j;
-            }
-         }
-         return sum;
-      }
-
-- While loop, break, and continue support
-   - Parse and generate VHDL for while (<expr>) { ... } loops
-   - Support for break; and continue; statements inside loops, including inside if, else if, and else blocks within loops
-   - VHDL codegen emits exit; for break and next; for continue
-
-Debug Build Instructions
-------------------------
-
-To enable verbose debug output for developers, configure the build with the -DDEBUG=ON argument:
+To enable verbose debug output:
 
 .. code-block:: bash
 
    cmake -DDEBUG=ON ..
    make
-
-This will provide additional debug prints and diagnostics during parsing and code generation.
-
-Roadmap
--------
-
-1. Control Flow Statements
-   - For loop and nested for loop support implemented (DONE)
-2. Global Variable Support
-   - Parse and represent global variable declarations
-   - Generate VHDL for global signals
-3. Function Calls
-   - Parse function calls within expressions and statements — DONE
-   - Inline or generate VHDL for simple calls — DONE
-4. Error Handling & Diagnostics
-   - Colored terminal output, severity levels, error counters — DONE
-   - Source location tracking with line/column — DONE
-5. VHDL Codegen Enhancements
-   - Optimize generated VHDL for hardware resources and timing
-6. Documentation & Examples
-   - Expand Sphinx documentation with module, function, and data structure details
-   - Add more example C files and expected VHDL outputs
-7. Code Cleanup and Restructuring
-   - Ensure clean code, improve maintainability, and refactor as needed
-8. Testing Improvements
-   - Parser end-to-end tests (C → VHDL) — DONE (integration_tests.cpp)
-   - Edge case and boundary tests — DONE (edge_case_tests.cpp)
-   - Add coverage reporting target
-   - Improve isolation for global state in unit tests
-
-
-Introduction
-------------
-
-Compi is a C-to-VHDL compiler for basic hardware synthesis.
 
 Indices and tables
 ==================
