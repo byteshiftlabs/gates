@@ -7,7 +7,7 @@ This project is organized into modular source files, each responsible for a key 
     :depth: 2
     :local:
 
-src/app/compi.c
+src/app/gates.c
 ---------------
 The main entry point for the compiler. Handles command-line arguments, file I/O, and orchestrates the parsing and code generation process. It calls the parser to build the AST and then invokes the VHDL generator.
 
@@ -65,14 +65,19 @@ Build configuration for compiling all source files. Sources are listed explicitl
 
 tests/
 ------
-Contains GoogleTest-based C++ test files:
+Contains GoogleTest-based C++ test files organized into subdirectories:
 
-- **basic_tests.cpp** — Unit tests for AST construction, utilities, and lexer.
-- **test_error_handler.cpp** — Unit tests for multi-level error diagnostics.
-- **integration_tests.cpp** — End-to-end C→VHDL translation tests.
-- **edge_case_tests.cpp** — Boundary conditions and error path tests.
+**Unit Tests** (``tests/unit/``):
 
-The build creates a reusable ``compi_gtest`` static library (all C sources except the CLI front-end) so tests link cleanly without invoking the command-line interface. Tests are auto-discovered with ``gtest_discover_tests`` enabling each test case to appear individually in CTest output.
+- **basic_tests.cpp** — Core component tests: AST nodes, utilities, tokens, symbol tables
+- **edge_case_tests.cpp** — Boundary conditions and robustness tests
+- **test_error_handler.cpp** — Error handler module tests
+
+**Integration Tests** (``tests/integration/``):
+
+- **integration_tests.cpp** — Component boundary tests, end-to-end smoke tests, negative tests, VHDL validation
+
+The build creates a reusable ``gates_gtest`` static library (all C sources except the CLI front-end) so tests link cleanly without invoking the command-line interface. Tests are auto-discovered with ``gtest_discover_tests`` enabling each test case to appear individually in CTest output.
 
 run_tests.sh
 ------------
