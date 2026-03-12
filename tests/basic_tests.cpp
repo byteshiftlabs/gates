@@ -3,18 +3,14 @@ extern "C" {
 #include "astnode.h"
 #include "parse.h"
 #include "token.h"
+#include "parser/tokenizer.h"
 #include "utils.h"
 #include "symbol_arrays.h"
+#include "codegen/codegen_vhdl_helpers.h"
 }
 #include <cstdio>
 #include <cstring>
 #include <memory>
-
-// Provide externs for internal globals needed by tests
-extern "C" {
-    extern int g_array_count; // declared in utils.c
-    extern Token current_token; // defined in token.c
-}
 
 // Existing basic AST creation test
 TEST(ASTNodeTests, CreateAndLink) {
@@ -72,7 +68,7 @@ TEST(UtilsTests, IsNumberStr) {
 
 // Test registering and querying array sizes (no duplicates)
 TEST(UtilsTests, RegisterArrayAndLookup) {
-    g_array_count = 0; // reset global state for test isolation
+    reset_array_table(); // reset global state for test isolation
     register_array("arr", 5);
     EXPECT_EQ(find_array_size("arr"), 5);
     // Re-register with different size should update
@@ -89,33 +85,34 @@ TEST(TokenTests, BasicLexing) {
     ASSERT_NE(f, nullptr);
     fwrite(src, 1, strlen(src), f);
     rewind(f);
-    current_line = 1; // reset line tracking
-    advance(f); // prime first token
+    ParserContext ctx;
+    parser_context_init(&ctx, f);
+    advance(&ctx); // prime first token
     // int
-    EXPECT_EQ(current_token.type, TOKEN_KEYWORD);
-    EXPECT_STREQ(current_token.value, "int");
-    advance(f); // x
-    EXPECT_EQ(current_token.type, TOKEN_IDENTIFIER);
-    advance(f); // =
-    EXPECT_EQ(current_token.type, TOKEN_OPERATOR);
-    advance(f); // a
-    EXPECT_EQ(current_token.type, TOKEN_IDENTIFIER);
-    advance(f); // +
-    EXPECT_EQ(current_token.type, TOKEN_OPERATOR);
-    advance(f); // 42
-    EXPECT_EQ(current_token.type, TOKEN_NUMBER);
+    EXPECT_EQ(ctx.current_token.type, TOKEN_KEYWORD);
+    EXPECT_STREQ(ctx.current_token.value, "int");
+    advance(&ctx); // x
+    EXPECT_EQ(ctx.current_token.type, TOKEN_IDENTIFIER);
+    advance(&ctx); // =
+    EXPECT_EQ(ctx.current_token.type, TOKEN_OPERATOR);
+    advance(&ctx); // a
+    EXPECT_EQ(ctx.current_token.type, TOKEN_IDENTIFIER);
+    advance(&ctx); // +
+    EXPECT_EQ(ctx.current_token.type, TOKEN_OPERATOR);
+    advance(&ctx); // 42
+    EXPECT_EQ(ctx.current_token.type, TOKEN_NUMBER);
     // Skip to end of first statement ;
-    while (current_token.type != TOKEN_SEMICOLON && current_token.type != TOKEN_EOF) advance(f);
-    if (current_token.type == TOKEN_SEMICOLON) advance(f);
+    while (ctx.current_token.type != TOKEN_SEMICOLON && ctx.current_token.type != TOKEN_EOF) advance(&ctx);
+    if (ctx.current_token.type == TOKEN_SEMICOLON) advance(&ctx);
     // if
-    while (current_token.type != TOKEN_KEYWORD && current_token.type != TOKEN_EOF) advance(f);
-    EXPECT_EQ(current_token.type, TOKEN_KEYWORD);
-    EXPECT_STREQ(current_token.value, "if");
+    while (ctx.current_token.type != TOKEN_KEYWORD && ctx.current_token.type != TOKEN_EOF) advance(&ctx);
+    EXPECT_EQ(ctx.current_token.type, TOKEN_KEYWORD);
+    EXPECT_STREQ(ctx.current_token.value, "if");
     // scan until ==
     bool saw_eqeq = false;
-    while (current_token.type != TOKEN_EOF) {
-        if (current_token.type == TOKEN_OPERATOR && strcmp(current_token.value, "==") == 0) { saw_eqeq = true; break; }
-        advance(f);
+    while (ctx.current_token.type != TOKEN_EOF) {
+        if (ctx.current_token.type == TOKEN_OPERATOR && strcmp(ctx.current_token.value, "==") == 0) { saw_eqeq = true; break; }
+        advance(&ctx);
     }
     EXPECT_TRUE(saw_eqeq);
     fclose(f);
