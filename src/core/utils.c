@@ -1,6 +1,14 @@
-#include "utils.h"
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-// Buffer-safe string append: appends src to dst without overflowing dst_size
+#include "utils.h"
+#include "error_handler.h"
+
+// Prevents buffer overflows when building strings incrementally (e.g. VHDL identifiers).
 void safe_append(char *dst, size_t dst_size, const char *src)
 {
     size_t used = strlen(dst);
@@ -16,7 +24,8 @@ void safe_append(char *dst, size_t dst_size, const char *src)
     dst[used + copy_length] = '\0';
 }
 
-// Buffer-safe string copy: copies at most limit chars from src into dst
+// Bounded copy — callers set limit when the source may be unterminated
+// or when only a prefix is needed (e.g. token extraction from input buffer).
 void safe_copy(char *dst, size_t dst_size, const char *src, size_t limit)
 {
     if (!dst_size) {
@@ -33,7 +42,8 @@ void safe_copy(char *dst, size_t dst_size, const char *src, size_t limit)
     dst[source_length] = '\0';
 }
 
-// Helper function to get operator precedence
+// Drives the parser's decision of when to reduce binary expressions.
+// Higher precedence binds tighter, matching standard C operator rules.
 int get_precedence(const char *op)
 {
     if (!op) {
@@ -73,13 +83,10 @@ int get_precedence(const char *op)
     return PREC_UNKNOWN;
 }
 
-// Helper function to print tree branch decoration
-void print_tree_prefix(int level, int is_last)
+// Box-drawing characters (└── / ├──) give visual structure to the AST dump.
+static void print_tree_prefix(int level, int is_last)
 {
-
-    int level_idx = 0;
-
-    for (level_idx = 0; level_idx < level; level_idx++) {
+    for (int level_idx = 0; level_idx < level; level_idx++) {
         printf("%s", (level_idx == level - 1) ? (is_last ? "└── " : "├── ") : "    ");
     }
 }
@@ -87,14 +94,11 @@ void print_tree_prefix(int level, int is_last)
 
 int is_number_str(const char *str)
 {
-
-    const char *str_ptr = NULL;
-
     if (!str || !*str) {
         return 0;
     }
 
-    str_ptr = str;
+    const char *str_ptr = str;
 
     if (*str_ptr == '+' || *str_ptr == '-') {
         str_ptr++;
@@ -113,54 +117,10 @@ int is_number_str(const char *str)
     return 1;
 }
 
-// Add this helper function above generate_vhdl:
-int is_negative_literal(const char* value)
+// Each AST node type has a distinct display format for the debug tree.
+// Extracted so print_ast() stays focused on tree traversal/indentation.
+static void print_node_type(const ASTNode *node)
 {
-
-    int char_idx = 1;
-    int has_literal_chars = 0;
-
-    if (!value || value[0] != '-' || strlen(value) < 2)
-        return 0;
-
-    while (value[char_idx]) {
-        if (isdigit(value[char_idx]) || value[char_idx] == '.' || isalpha(value[char_idx]) || value[char_idx] == '_') {
-            has_literal_chars = 1;
-        } else {
-            return 0;
-        }
-        char_idx++;
-    }
-
-    return has_literal_chars;
-}
-
-// Print the AST recursively in a readable tree format
-void print_ast(ASTNode* node, int level)
-{
-
-    int is_last = 1;
-    int child_idx = 0;
-    ASTNode *parent = NULL;
-
-    if (!node) {
-        return;
-    }
-
-    // Find if this node is the last child
-    if (node->parent) {
-        parent = node->parent;
-        for (child_idx = 0; child_idx < parent->num_children; child_idx++) {
-            if (parent->children[child_idx] == node) {
-                is_last = (child_idx == parent->num_children - 1);
-                break;
-            }
-        }
-    }
-
-    print_tree_prefix(level, is_last);
-
-    // Print node type
     switch (node->type) {
         case NODE_PROGRAM:
             printf("PROGRAM\n");
@@ -208,30 +168,89 @@ void print_ast(ASTNode* node, int level)
         case NODE_CONTINUE_STATEMENT:
             printf("CONTINUE\n");
             break;
+        case NODE_FOR_STATEMENT:
+            printf("FOR\n");
+            break;
+        case NODE_FUNC_CALL:
+            printf("FUNC_CALL: %s\n", node->value ? node->value : "(null)");
+            break;
+        case NODE_STRUCT_DECL:
+            printf("STRUCT: %s\n", node->value ? node->value : "(null)");
+            break;
+        case NODE_LITERAL:
+            printf("LITERAL: %s\n", node->value ? node->value : "(null)");
+            break;
+        case NODE_IDENTIFIER:
+            printf("IDENTIFIER: %s\n", node->value ? node->value : "(null)");
+            break;
         default:
             printf("NODE_TYPE_%d\n", node->type);
             break;
     }
+}
 
-    for (child_idx = 0; child_idx < node->num_children; child_idx++) {
+// Recursive tree-format AST printer for debugging.
+// Decorates each level with box-drawing characters to visualize parent-child structure.
+void print_ast(ASTNode* node, int level)
+{
+    if (!node) {
+        return;
+    }
+
+    int is_last = 1;
+
+    if (node->parent) {
+        const ASTNode *parent = node->parent;
+        for (int child_idx = 0; child_idx < parent->num_children; child_idx++) {
+            if (parent->children[child_idx] == node) {
+                is_last = (child_idx == parent->num_children - 1);
+                break;
+            }
+        }
+    }
+
+    print_tree_prefix(level, is_last);
+    print_node_type(node);
+
+    for (int child_idx = 0; child_idx < node->num_children; child_idx++) {
         print_ast(node->children[child_idx], level + 1);
     }
 }
 
-// Helper function to map C types to VHDL types
-char* ctype_to_vhdl(const char* ctype)
+// Uses strtol instead of atoi to detect overflow, trailing garbage, and empty strings.
+int safe_strtoi(const char *str, int *result)
 {
-
-    // No local variables needed
-    if (strcmp(ctype, "int") == 0) {
-        return "std_logic_vector(31 downto 0)";
-    } else if (strcmp(ctype, "float") == 0) {
-        return "std_logic_vector(31 downto 0)"; // You may want to use 'real' for advanced VHDL
-    } else if (strcmp(ctype, "double") == 0) {
-        return "std_logic_vector(63 downto 0)"; // Or 'real'
-    } else if (strcmp(ctype, "char") == 0) {
-        return "std_logic_vector(7 downto 0)";
+    if (!str || !*str || !result) {
+        return 0;
     }
-    // Default fallback
-    return "std_logic_vector(31 downto 0)";
+
+    char *endptr = NULL;
+    errno = 0;
+    long val = strtol(str, &endptr, 10);
+
+    if (errno == ERANGE || val > INT_MAX || val < INT_MIN) {
+        return 0;
+    }
+    if (endptr == str || *endptr != '\0') {
+        return 0;
+    }
+
+    *result = (int)val;
+    return 1;
+}
+
+// Duplicate a string, aborting on allocation failure.
+// In a compiler, OOM is fatal — callers should not need to check.
+char *safe_strdup(const char *src)
+{
+    if (!src) {
+        return NULL;
+    }
+
+    char *copy = strdup(src);
+    if (!copy) {
+        log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to allocate memory for string");
+        exit(EXIT_FAILURE);
+    }
+    return copy;
 }
