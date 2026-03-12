@@ -1,3 +1,16 @@
+/**
+ * @file test_error_handler.cpp
+ * @brief Unit tests for the error handler module.
+ *
+ * Tests verify:
+ * - Error counter increments for different severity levels
+ * - Warning counter increments correctly
+ * - Counter resets work properly
+ * - Message formatting with and without colors
+ * - Extended error reporting with file locations and context
+ * - Error codes and diagnostic hints
+ */
+
 #include <gtest/gtest.h>
 extern "C" {
     #include "error_handler.h"
