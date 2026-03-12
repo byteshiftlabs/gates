@@ -319,7 +319,7 @@ static const char* get_vhdl_default_value(const char *c_type)
 // Reset each local signal to zero on hardware reset; arrays, structs, and
 // simple signals each need different VHDL reset syntax.
 // Uses the emitter's indentation rather than a manual indent string.
-static void emit_reset_assignment(ASTNode *var_decl)
+static void emit_reset_assignment(const ASTNode *var_decl)
 {
     const char *var_name = var_decl->value;
     if (var_name == NULL) {
