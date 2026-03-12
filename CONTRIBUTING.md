@@ -29,14 +29,23 @@ Fixed null pointer exception in parser
 Renamed ambiguous variables, removed magic numbers
 ```
 
-## Coding Guidelines
+## Code Quality
 
+All contributions must meet these standards before merging:
+
+- GNU coding standards compliance (https://www.gnu.org/prep/standards/)
+- Includes organized: stdlib → third-party → local
+- Clear, descriptive naming for structs, functions, and variables
+- No magic numbers — use `#define` or `const`
+- No hardcoded values in function calls
+- Prefer string functions over regex where possible
+- Consistent formatting and structure throughout
+- No dead code or unused imports
+- No code duplication — extract shared logic into reusable functions (3+ occurrences)
+- No file exceeds 500 lines
+- Complex logic has comments explaining "why", not "what"
 - Code compiles with `-Wall -Wextra -Wpedantic` and zero warnings
 - All tests pass before submitting (`./run_tests.sh`)
-- Follow the established patterns and conventions in the codebase
-- No file exceeds 500 lines
-- No magic numbers — use `#define` or named constants
-- No code duplication — extract shared logic into reusable functions
 
 See [docs/source/code_quality.rst](docs/source/code_quality.rst) for detailed coding standards.
 
