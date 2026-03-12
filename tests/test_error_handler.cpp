@@ -226,10 +226,10 @@ TEST_F(ErrorHandlerTest, ExtendedLocationWithFilename) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = "test.c",
-        .line = 42,
-        .column = 15,
-        .source_line = NULL
+        "test.c",
+        42,
+        15,
+        NULL
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_PARSER, &loc, NULL,
@@ -244,10 +244,10 @@ TEST_F(ErrorHandlerTest, ExtendedLocationWithSourceContext) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = "main.c",
-        .line = 10,
-        .column = 9,
-        .source_line = "int x = 5"
+        "main.c",
+        10,
+        9,
+        "int x = 5"
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_PARSER, &loc, NULL,
@@ -263,10 +263,10 @@ TEST_F(ErrorHandlerTest, ErrorCodeDisplay) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = "test.c",
-        .line = 25,
-        .column = 3,
-        .source_line = NULL
+        "test.c",
+        25,
+        3,
+        NULL
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_SEMANTIC, &loc, "E0042",
@@ -281,10 +281,10 @@ TEST_F(ErrorHandlerTest, MultilineErrorWithHint) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = "example.c",
-        .line = 15,
-        .column = 5,
-        .source_line = "foo(x, y"
+        "example.c",
+        15,
+        5,
+        "foo(x, y"
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_PARSER, &loc, "E0001",
@@ -301,10 +301,10 @@ TEST_F(ErrorHandlerTest, ErrorWithSuggestion) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = "vars.c",
-        .line = 20,
-        .column = 10,
-        .source_line = "print(\"hello\");"
+        "vars.c",
+        20,
+        10,
+        "print(\"hello\");"
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_SEMANTIC, &loc, "E0100",
@@ -321,10 +321,10 @@ TEST_F(ErrorHandlerTest, ErrorWithHintAndSuggestion) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = "typo.c",
-        .line = 8,
-        .column = 5,
-        .source_line = "retrun 0;"
+        "typo.c",
+        8,
+        5,
+        "retrun 0;"
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_PARSER, &loc, "E0050",
@@ -343,10 +343,10 @@ TEST_F(ErrorHandlerTest, SourceContextCaretAlignment) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = NULL,
-        .line = 42,
-        .column = 15,
-        .source_line = "int result = x + y * z;"
+        NULL,
+        42,
+        15,
+        "int result = x + y * z;"
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_SEMANTIC, &loc, NULL,
@@ -360,10 +360,10 @@ TEST_F(ErrorHandlerTest, SourceContextCaretAlignment) {
 
 TEST_F(ErrorHandlerTest, ExtendedErrorIncrementsCounter) {
     ErrorLocation loc = {
-        .filename = "test.c",
-        .line = 10,
-        .column = 5,
-        .source_line = NULL
+        "test.c",
+        10,
+        5,
+        NULL
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_PARSER, &loc, "E0001",
@@ -375,10 +375,10 @@ TEST_F(ErrorHandlerTest, ExtendedErrorIncrementsCounter) {
 
 TEST_F(ErrorHandlerTest, ExtendedWarningIncrementsCounter) {
     ErrorLocation loc = {
-        .filename = "warn.c",
-        .line = 5,
-        .column = 3,
-        .source_line = NULL
+        "warn.c",
+        5,
+        3,
+        NULL
     };
     
     report_message_ex(SEVERITY_WARNING, ERROR_CATEGORY_SEMANTIC, &loc, "W0010",
@@ -392,10 +392,10 @@ TEST_F(ErrorHandlerTest, LocationWithoutFilename) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = NULL,
-        .line = 33,
-        .column = 0,
-        .source_line = NULL
+        NULL,
+        33,
+        0,
+        NULL
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_PARSER, &loc, NULL,
@@ -410,10 +410,10 @@ TEST_F(ErrorHandlerTest, CompleteErrorReport) {
     StderrCapture capture;
     
     ErrorLocation loc = {
-        .filename = "complete.c",
-        .line = 100,
-        .column = 20,
-        .source_line = "if (condition)  else { }"
+        "complete.c",
+        100,
+        20,
+        "if (condition)  else { }"
     };
     
     report_message_ex(SEVERITY_ERROR, ERROR_CATEGORY_PARSER, &loc, "E0075",
