@@ -1,6 +1,7 @@
-#include "error_handler.h"
-#include <stdio.h>
 #include <stdarg.h>
+#include <stdio.h>
+
+#include "error_handler.h"
 
 // ANSI color codes
 #define COLOR_RESET   "\033[0m"
@@ -17,7 +18,13 @@
 #define MAX_SOURCE_LINE_LENGTH 1024
 #define INDENT_SPACES "    "
 
-// Global counters
+// -------------------------------------------------------------
+// Global State
+// -------------------------------------------------------------
+// Note: These globals are used for single-threaded, single-file compilation.
+// For multi-threaded usage, refactor to use a CompilerContext struct.
+// Call reset_error_state() between independent compilations.
+// -------------------------------------------------------------
 static int error_count = 0;
 static int warning_count = 0;
 static int colored_output_enabled = COLORED_OUTPUT_ENABLED;
@@ -347,6 +354,7 @@ void reset_error_counters(void)
 {
     error_count = 0;
     warning_count = 0;
+    colored_output_enabled = COLORED_OUTPUT_ENABLED;
 }
 
 int has_errors(void)
