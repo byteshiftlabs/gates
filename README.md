@@ -1,11 +1,17 @@
 # Compi
 
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+![Language: C11](https://img.shields.io/badge/Language-C11-blue.svg)
+![Build: CMake](https://img.shields.io/badge/Build-CMake_3.14+-orange.svg)
+![Tests: 62 passing](https://img.shields.io/badge/Tests-62_passing-brightgreen.svg)
+![cppcheck: clean](https://img.shields.io/badge/cppcheck-clean-brightgreen.svg)
+
 Minimal C subset → VHDL translator
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/cmelnulabs/compi.git
+git clone https://github.com/byteshiftlabs/compi.git
 cd compi && mkdir build && cd build
 cmake .. && make
 ./compi input.c output.vhdl
