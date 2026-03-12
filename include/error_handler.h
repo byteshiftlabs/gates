@@ -19,8 +19,6 @@ typedef enum {
 } ErrorCategory;
 
 // Constants for location tracking
-#define NO_LINE_NUMBER 0
-#define NO_COLUMN_NUMBER 0
 
 /**
  * Structure to hold error location information
