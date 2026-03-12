@@ -137,7 +137,11 @@ if(ENABLE_TESTING)
     message(STATUS "Using existing GTest package")
   endif()
 
-  file(GLOB TEST_SOURCES "tests/*.cpp" "tests/*.cc" "tests/*.cxx")
+  # Collect test sources from unit and integration subdirectories
+  file(GLOB_RECURSE TEST_SOURCES 
+    "tests/unit/*.cpp" "tests/unit/*.cc" "tests/unit/*.cxx"
+    "tests/integration/*.cpp" "tests/integration/*.cc" "tests/integration/*.cxx"
+  )
   if(TEST_SOURCES)
     add_executable(gates_tests ${TEST_SOURCES})
     if(TARGET GTest::gtest_main)
@@ -165,7 +169,7 @@ if(ENABLE_TESTING)
     # Convenience aggregate target: build tests then run them with verbose failure output
     add_custom_target(test_all
       COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-      DEPENDS compi_tests
+      DEPENDS gates_tests
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
       COMMENT "Building and running all GoogleTest cases"
     )
