@@ -115,3 +115,5 @@ See [ROADMAP.md](ROADMAP.md) for planned features and [docs/](docs/) for full do
 ## License
 
 GPL v3 — see [LICENSE](LICENSE).
+
+> **Disclosure:** This software was developed with AI assistance under human supervision.
