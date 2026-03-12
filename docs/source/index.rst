@@ -96,10 +96,11 @@ Roadmap
    - Parse and represent global variable declarations
    - Generate VHDL for global signals
 3. Function Calls
-   - Parse function calls within expressions and statements
-   - Inline or generate VHDL for simple calls
+   - Parse function calls within expressions and statements — DONE
+   - Inline or generate VHDL for simple calls — DONE
 4. Error Handling & Diagnostics
-   - Improve error messages and diagnostics for unsupported constructs
+   - Colored terminal output, severity levels, error counters — DONE
+   - Source location tracking with line/column — DONE
 5. VHDL Codegen Enhancements
    - Optimize generated VHDL for hardware resources and timing
 6. Documentation & Examples
@@ -108,7 +109,8 @@ Roadmap
 7. Code Cleanup and Restructuring
    - Ensure clean code, improve maintainability, and refactor as needed
 8. Testing Improvements
-   - Add parser end-to-end tests (C → VHDL)
+   - Parser end-to-end tests (C → VHDL) — DONE (integration_tests.cpp)
+   - Edge case and boundary tests — DONE (edge_case_tests.cpp)
    - Add coverage reporting target
    - Improve isolation for global state in unit tests
 
