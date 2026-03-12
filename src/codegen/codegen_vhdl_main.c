@@ -170,7 +170,7 @@ static void generate_function_declaration(ASTNode *node, FILE *output_file)
     }
 
     // Emit output port (result)
-    if (node->token.value != NULL && strlen(node->token.value) > 0)
+    if (node->token.value[0] != '\0')
     {
         int return_struct_index = find_struct_index(node->token.value);
         int is_struct_return = (return_struct_index >= 0);
