@@ -14,26 +14,26 @@ The Compi compiler is structured as a multi-stage pipeline:
    └─────────────┘     └─────────────┘     └─────────────┘     └──────────────┘
                                                                         │
                                                                         ▼
-   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
-   │VHDL Output  │ <── │    VHDL     │ <── │   Type      │ <── │  Semantic    │
-   │ (.vhd file) │     │  Generator  │     │  Checking   │     │  Analysis    │
-   └─────────────┘     └─────────────┘     └─────────────┘     └──────────────┘
+   ┌─────────────┐     ┌─────────────┐                          ┌──────────────┐
+   │VHDL Output  │ <── │    VHDL     │ <────────────────────── │  Code Gen    │
+   │ (.vhd file) │     │  Generator  │                          │              │
+   └─────────────┘     └─────────────┘                          └──────────────┘
 
 Pipeline Stages
 ---------------
 
 1. **Lexical Analysis (Lexer)**
-   
-   - Input: Raw C source code string
-   - Output: Stream of tokens
-   - Location: ``src/core/lexer.c``
+
+   - Input: Raw C source code (``FILE*`` stream)
+   - Output: Stream of tokens via ``ParserContext``
+   - Location: ``src/parser/token.c``, ``include/token.h``, ``src/parser/tokenizer.h``
    - Responsibilities:
-     
+
      * Scan character by character
      * Recognize keywords, identifiers, literals, operators
      * Skip whitespace and comments
-     * Track line/column numbers for error reporting
-     * Build token stream for parser
+     * Track line numbers for error reporting
+     * Provide token stream to parser via ``advance()``, ``match()``, ``consume()``
 
 2. **Syntax Analysis (Parser)**
 
@@ -41,64 +41,58 @@ Pipeline Stages
    - Output: Abstract Syntax Tree (AST)
    - Location: ``src/parser/``
    - Components:
-     
-     * ``parse.c`` - Main parser driver
-     * ``parse_function.c`` - Function declaration parsing
-     * ``parse_statement.c`` - Statement parsing (if/while/for/return/etc)
-     * ``parse_expression.c`` - Expression parsing with precedence climbing
-     * ``parse_struct.c`` - Struct definition parsing
-   
+
+     * ``parse.c`` — Main parser driver
+     * ``parse_function.c`` — Function declaration parsing
+     * ``parse_statement.c`` — Statement parsing (variable declarations, assignments, returns)
+     * ``parse_expression.c`` — Expression parsing with precedence climbing
+     * ``parse_control_flow.c`` — Control flow parsing (if/else, while, for, break)
+     * ``parse_struct.c`` — Struct definition parsing
+
    - Responsibilities:
-     
+
      * Validate syntax according to C grammar subset
      * Build AST nodes representing program structure
      * Handle operator precedence and associativity
-     * Parse declarations, statements, expressions
-     * Error recovery and reporting
+     * Register structs and arrays in symbol tables during parsing
+     * Error reporting through the centralized error handler
 
 3. **Symbol Table Construction**
 
-   - Input: AST nodes
-   - Output: Symbol tables with scope information
+   - Input: Registration calls during parsing
+   - Output: Symbol tables for structs and arrays
    - Location: ``src/symbols/``
    - Components:
-     
-     * ``symbol_table.c`` - Main symbol table implementation
-     * ``symbol_arrays.c`` - Array symbol tracking
-     * ``symbol_structs.c`` - Struct type tracking
-   
+
+     * ``symbol_arrays.c`` — Array symbol tracking (name, size)
+     * ``symbol_structs.c`` — Struct type tracking (name, fields)
+
    - Responsibilities:
-     
-     * Track variables, functions, types across scopes
-     * Resolve symbol references
-     * Detect redeclarations and undefined symbols
-     * Maintain type information for checking
 
-4. **Semantic Analysis & Type Checking**
+     * Track array declarations and sizes
+     * Track struct definitions and field types
+     * Provide lookup by name for code generation
 
-   - Input: AST + Symbol tables
-   - Output: Validated, type-annotated AST
-   - Location: Integrated with parser
+4. **Code Generation (VHDL)**
+
+   - Input: AST + symbol tables
+   - Output: VHDL source code written to ``FILE*``
+   - Location: ``src/codegen/`` (split across 6 files)
+   - Components:
+
+     * ``codegen_vhdl_main.c`` — Top-level VHDL generation (entity, architecture)
+     * ``codegen_vhdl_expressions.c`` — Expression translation
+     * ``codegen_vhdl_statements.c`` — Statement translation (assignments, loops, if/else)
+     * ``codegen_vhdl_helpers.c`` — Name mapping, type checking utilities
+     * ``codegen_vhdl_types.c`` — Type/signal declarations
+     * ``codegen_vhdl_constants.c`` — Centralized string constants
+
    - Responsibilities:
-     
-     * Verify type compatibility in expressions
-     * Check function call signatures
-     * Validate array access bounds (where possible)
-     * Ensure control flow statements are valid
-     * Type coercion rules (C promotion rules)
 
-5. **Code Generation (VHDL)**
-
-   - Input: Validated AST
-   - Output: VHDL source code
-   - Location: ``src/codegen/codegen_vhdl.c``
-   - Responsibilities:
-     
      * Generate VHDL entity declarations
      * Generate VHDL architecture bodies
      * Map C types to VHDL types
-     * Translate C expressions to VHDL
-     * Translate C control flow to VHDL processes
+     * Translate C expressions and control flow to VHDL
      * Handle arrays, structs, and complex types
 
 Directory Structure
@@ -109,7 +103,7 @@ Directory Structure
    compi/
    ├── CMakeLists.txt          # CMake build configuration
    ├── README.md               # Project overview
-   ├── LICENSE                 # License file
+   ├── LICENSE                  # GPL v3
    ├── build_and_run.sh        # Build and run script
    ├── build_docs.sh           # Documentation build script
    ├── run_tests.sh            # Test runner script
@@ -117,39 +111,61 @@ Directory Structure
    ├── include/                # Public header files
    │   ├── astnode.h           # AST node structures
    │   ├── codegen_vhdl.h      # VHDL code generator API
+   │   ├── error_handler.h     # Centralized error/warning reporting
    │   ├── parse.h             # Parser main API
-   │   ├── parse_expression.h  # Expression parser API
-   │   ├── parse_function.h    # Function parser API
-   │   ├── parse_statement.h   # Statement parser API
-   │   ├── parse_struct.h      # Struct parser API
    │   ├── symbol_arrays.h     # Array symbol table API
    │   ├── symbol_structs.h    # Struct symbol table API
-   │   ├── token.h             # Token definitions
+   │   ├── token.h             # Token types, Token struct, ParserContext
    │   └── utils.h             # Utility functions
    │
    ├── src/                    # Source code
+   │   ├── error_handler.c     # Error handler implementation
    │   ├── app/                # Application entry point
-   │   │   └── main.c          # Main function
-   │   ├── core/               # Core compiler components
-   │   │   └── lexer.c         # Lexical analyzer
+   │   │   └── compi.c         # Main function
+   │   ├── core/               # Core data structures
+   │   │   ├── astnode.c       # AST node create/add_child/free
+   │   │   └── utils.c         # Utilities (safe_strdup, print_ast, etc.)
    │   ├── parser/             # Parser components
    │   │   ├── parse.c         # Main parser driver
-   │   │   ├── parse_expression.c
-   │   │   ├── parse_function.c
-   │   │   ├── parse_statement.c
-   │   │   └── parse_struct.c
+   │   │   ├── parse_control_flow.c  # if/else, while, for, break
+   │   │   ├── parse_expression.c    # Expressions with precedence climbing
+   │   │   ├── parse_function.c      # Function declarations
+   │   │   ├── parse_statement.c     # Variables, assignments, returns
+   │   │   ├── parse_struct.c        # Struct definitions
+   │   │   ├── token.c               # Lexer implementation
+   │   │   ├── tokenizer.h           # Internal lexer API
+   │   │   ├── parse_control_flow.h  # Internal header
+   │   │   ├── parse_expression.h    # Internal header
+   │   │   ├── parse_function.h      # Internal header
+   │   │   ├── parse_statement.h     # Internal header
+   │   │   └── parse_struct.h        # Internal header
    │   ├── codegen/            # Code generation
-   │   │   └── codegen_vhdl.c
+   │   │   ├── codegen_vhdl_main.c
+   │   │   ├── codegen_vhdl_expressions.c
+   │   │   ├── codegen_vhdl_statements.c
+   │   │   ├── codegen_vhdl_helpers.c
+   │   │   ├── codegen_vhdl_types.c
+   │   │   ├── codegen_vhdl_constants.c
+   │   │   └── (internal .h headers)
    │   └── symbols/            # Symbol tables
    │       ├── symbol_arrays.c
    │       └── symbol_structs.c
    │
    ├── examples/               # Example C files for testing
    │   ├── example.c
-   │   └── struct_example.c
+   │   ├── function_calls.c
+   │   ├── struct_example.c
+   │   └── test_error_handler.c
    │
-   ├── tests/                  # Unit tests
-   │   └── ...
+   ├── tests/                  # GoogleTest unit/integration tests
+   │   ├── basic_tests.cpp
+   │   ├── edge_case_tests.cpp
+   │   ├── integration_tests.cpp
+   │   └── test_error_handler.cpp
+   │
+   ├── tools/                  # Development tools
+   │   ├── run_cppcheck.sh
+   │   └── cppcheck_suppressions.txt
    │
    └── docs/                   # Sphinx documentation
        ├── Makefile
@@ -166,133 +182,97 @@ Main Compilation Flow
 
 .. code-block:: c
 
-   // Pseudo-code representation of main compilation flow
-   
-   int main(int argc, char **argv) {
-       // 1. Read input C source file
-       char *source_code = read_file(argv[1]);
-       
-       // 2. Lexical analysis - tokenize
-       Token *tokens = tokenize(source_code);
-       
-       // 3. Parse - build AST
-       ASTNode *ast_root = parse(tokens);
-       
-       // 4. Semantic analysis (integrated with parsing)
-       // - Symbol tables built during parsing
-       // - Type checking performed during AST construction
-       
-       // 5. Code generation - emit VHDL
-       char *vhdl_output = codegen_vhdl(ast_root);
-       
-       // 6. Write output VHDL file
-       write_file(output_file, vhdl_output);
-       
+   // Actual flow in compi.c (simplified)
+   int main(int argc, char *argv[]) {
+       FILE *fin  = fopen(argv[1], "r");
+       FILE *fout = fopen(argv[2], "w");
+
+       // Parse: tokenize + build AST in one pass
+       ASTNode *program = parse_program(fin);
+
+       if (!program || has_errors()) {
+           // Log error count, cleanup, exit
+       }
+
+       // Code generation: walk AST, emit VHDL
+       generate_vhdl(program, fout);
+
+       free_node(program);
+       fclose(fin);
+       fclose(fout);
        return 0;
    }
+
+``parse_program()`` internally creates a ``ParserContext``, tokenizes on demand
+via ``advance()``/``consume()``, and builds the AST in a single pass.
 
 Parser Data Flow
 ^^^^^^^^^^^^^^^^
 
 The parser uses a **recursive descent** strategy:
 
-1. Start with ``parse_program()``
-2. Parse global declarations and function definitions
-3. For each function:
-   
-   - Parse function signature (return type, name, parameters)
-   - Parse function body (compound statement)
-   - Recursively parse statements inside body
+1. ``parse_program()`` initializes a ``ParserContext`` and enters the parsing loop
+2. Dispatches to sub-parsers based on the current token:
 
-4. For each statement:
-   
-   - Detect statement type (if/while/for/return/assignment/etc)
-   - Call appropriate statement parser
-   - Build AST node for statement
-   - Attach to parent AST node
+   - ``parse_struct()`` for struct definitions
+   - ``parse_function()`` for function declarations
+   - ``parse_variable_declaration()`` for global variables
 
-5. For each expression:
-   
-   - Use precedence climbing algorithm
-   - Parse operators with proper precedence and associativity
-   - Build expression AST subtree
-   - Return expression node to statement parser
+3. Each sub-parser builds AST nodes and registers symbols:
 
-AST Construction
-^^^^^^^^^^^^^^^^
+   - ``register_struct()`` for struct definitions
+   - ``register_array()`` for array declarations
 
-AST nodes are allocated dynamically and linked in a tree structure:
+4. Expression parsing uses a precedence climbing algorithm in ``parse_expression_prec()``
+5. Errors are reported via ``log_error()`` and propagated via ``return NULL`` + ``has_errors()`` guards
+
+AST Structure
+^^^^^^^^^^^^^
+
+AST nodes use a flat, uniform structure:
 
 .. code-block:: c
 
    typedef struct ASTNode {
-       ASTNodeType type;        // NODE_FUNCTION, NODE_IF, NODE_BINOP, etc.
-       
-       union {
-           // Different data for different node types
-           struct {
-               char *name;
-               ASTNode *params;
-               ASTNode *body;
-           } function;
-           
-           struct {
-               ASTNode *condition;
-               ASTNode *then_branch;
-               ASTNode *else_branch;
-           } if_stmt;
-           
-           struct {
-               TokenType operator;
-               ASTNode *left;
-               ASTNode *right;
-           } binop;
-           
-           // ... more node type variants
-       } data;
-       
-       // Source location for error reporting
-       int line;
-       int column;
+       NodeType type;           // NODE_PROGRAM, NODE_FUNCTION_DECL, NODE_IF_STATEMENT, etc.
+       Token token;             // Associated token (for type info, source location)
+       char *value;             // Dynamically allocated string value (name, operator, etc.)
+       struct ASTNode *parent;  // Parent node
+       struct ASTNode **children;  // Dynamic array of child nodes
+       int num_children;        // Current child count
+       int capacity;            // Allocated child array capacity
    } ASTNode;
 
+Nodes are created with ``create_node()``, linked with ``add_child()``, and freed
+recursively with ``free_node()``.
 
 Error Handling
 --------------
 
-Error Reporting Mechanism
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The compiler uses a centralized error reporting system:
+The compiler uses a centralized error reporting system in ``error_handler.h/c``:
 
 .. code-block:: c
 
-   void parser_error(const char *format, ...) {
-       fprintf(stderr, "Parse error at line %d: ", current_line);
-       va_list args;
-       va_start(args, format);
-       vfprintf(stderr, format, args);
-       va_end(args);
-       fprintf(stderr, "\n");
-       exit(1);  // Abort compilation
-   }
+   // Error reporting with severity, category, and source location
+   void log_error(ErrorCategory category, int line, const char *format, ...);
+   void log_warning(ErrorCategory category, int line, const char *format, ...);
 
-Error Recovery
-^^^^^^^^^^^^^^
+   // Error counting for flow control
+   int has_errors(void);
+   int get_error_count(void);
 
-- Currently: Fail-fast approach (abort on first error)
-- Future: Implement error recovery to report multiple errors
+Parser functions return ``NULL`` on error (after logging via ``log_error``).
+Parsing loops check ``has_errors()`` to stop iteration after the first error.
+The application (``compi.c``) checks ``has_errors()`` before proceeding to
+code generation.
 
 Debug Mode
 ----------
 
 Debug mode enabled with ``cmake -DDEBUG=ON`` provides:
 
-- Verbose token stream dumps
-- AST visualization before code generation
-- Parser state transitions
-- Symbol table contents
-- Code generation intermediate representations
+- AST visualization via ``print_ast()`` before code generation
+- Token stream tracing during parsing
 
 Build System
 ------------
@@ -302,18 +282,20 @@ CMake Configuration
 
 The project uses CMake for cross-platform builds:
 
-- Minimum CMake version: 3.10
+- Minimum CMake version: 3.14
 - C standard: C11
-- Compiler flags: ``-Wall -Wextra -std=c11``
-- Debug flags: ``-g -O0`` (when ``-DDEBUG=ON``)
+- C++ standard: C++17 (for GoogleTest)
+- Compiler flags: ``-Wall -Wextra -Wpedantic``
+- Debug flags: ``-g -O0 -DDEBUG`` (when ``-DDEBUG=ON``)
 - Release flags: ``-O3`` (default)
 
 Build Targets
 ^^^^^^^^^^^^^
 
-- ``compi`` - Main compiler executable
-- ``test`` - Run unit tests (if TESTING=ON)
-- ``docs`` - Build Sphinx HTML documentation
+- ``compi`` — Main compiler executable
+- ``compi_tests`` — GoogleTest test executable
+- ``cppcheck`` — Run cppcheck static analysis
+- ``docs`` — Build Sphinx HTML documentation
 
 Dependencies
 ------------
@@ -322,50 +304,43 @@ External Dependencies
 ^^^^^^^^^^^^^^^^^^^^^
 
 - **Standard C Library**: ``stdio.h``, ``stdlib.h``, ``string.h``, etc.
-- **Sphinx**: Documentation generation (Python package)
-- **CMake**: Build system (>= 3.10)
-- **GCC/Clang**: C compiler for building compi itself
+- **GoogleTest**: Unit testing framework (fetched via CMake FetchContent, v1.14.0, SHA256-pinned)
+- **Sphinx**: Documentation generation (Python)
+- **cppcheck**: Static analysis
+- **CMake**: Build system (>= 3.14)
+- **GCC**: C compiler supporting C11 (tested on GCC 13.3.0)
 
 Internal Dependencies
 ^^^^^^^^^^^^^^^^^^^^^
 
-Module dependency graph:
+Module dependency graph (``→`` means "depends on"):
 
 .. code-block:: text
 
-   main.c
-     └─> parse.h
-           ├─> parse_function.h
-           │     ├─> parse_statement.h
-           │     │     ├─> parse_expression.h
-           │     │     │     └─> token.h
-           │     │     └─> token.h
-           │     ├─> parse_expression.h
-           │     └─> symbol_arrays.h
-           ├─> parse_struct.h
-           ├─> codegen_vhdl.h
-           │     ├─> astnode.h
-           │     └─> symbol_arrays.h
-           └─> astnode.h
+   src/app/compi.c
+     → parse.h, codegen_vhdl.h, error_handler.h, utils.h
 
+   src/parser/parse.c
+     → tokenizer.h, parse_expression.h, parse_struct.h,
+       parse_function.h, parse_statement.h, error_handler.h
+
+   src/parser/parse_*.c
+     → tokenizer.h, astnode.h, error_handler.h, utils.h,
+       symbol_arrays.h / symbol_structs.h (as needed)
+
+   src/codegen/codegen_vhdl_main.c
+     → codegen_vhdl_*.h (internal headers),
+       symbol_structs.h, astnode.h
+
+   src/symbols/symbol_*.c
+     → symbol_*.h (public), error_handler.h
 
 Testing Strategy
 ----------------
 
 See :doc:`../testing` for detailed testing documentation.
 
-**Unit Tests**:
-
-- Lexer tests: Token recognition
-- Parser tests: AST construction
-- Code generator tests: VHDL output validation
-
-**Integration Tests**:
-
-- End-to-end: C file → VHDL file
-- Compare expected vs actual VHDL output
-
-**Test Coverage**:
-
-- Goal: >80% code coverage
-- Use ``gcov`` for coverage reporting
+- **62 tests** (35 unit + 12 integration + 15 edge case)
+- GoogleTest framework
+- Tests cover: lexer, parser, code generator, error handler, symbol tables
+- All tests pass with zero warnings in both release and debug configurations
