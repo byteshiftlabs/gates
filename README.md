@@ -3,7 +3,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Language: C11](https://img.shields.io/badge/Language-C11-blue.svg)
 ![Build: CMake](https://img.shields.io/badge/Build-CMake_3.14+-orange.svg)
-![Tests: 62 passing](https://img.shields.io/badge/Tests-62_passing-brightgreen.svg)
+![Tests: 74 passing](https://img.shields.io/badge/Tests-74_passing-brightgreen.svg)
 ![cppcheck: clean](https://img.shields.io/badge/cppcheck-clean-brightgreen.svg)
 
 Minimal C subset → VHDL translator
@@ -72,7 +72,7 @@ Each C function becomes a VHDL entity with clock/reset ports, input parameters a
 - Functions with return value propagation, structs, and arrays
 - VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
 - Multi-level error diagnostics (error/warning/note across 5 categories)
-- 62 unit, integration, and edge case tests (GoogleTest)
+- 74 unit, integration, and edge case tests (GoogleTest)
 
 ## Requirements
 
