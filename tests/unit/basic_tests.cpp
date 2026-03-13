@@ -1,3 +1,14 @@
+/**
+ * @file basic_tests.cpp
+ * @brief Unit tests for core components: AST nodes, utilities, tokens, and symbol tables.
+ *
+ * Tests verify:
+ * - AST node creation, linking, and memory management
+ * - Utility functions (operator precedence, numeric detection, string safety)
+ * - Token parsing and lexical analysis
+ * - Function call AST construction
+ */
+
 #include <gtest/gtest.h>
 extern "C" {
 #include "astnode.h"
