@@ -15,6 +15,7 @@ This section provides exhaustive documentation of the internal architecture, dat
    internals/codegen
    internals/types
    internals/algorithms
+   internals/error_handling
 
 Overview
 --------
@@ -29,3 +30,4 @@ Components
 - **Symbol Tables**: Type checking and scope management
 - **Code Generator**: VHDL output generation
 - **Type System**: C to VHDL type mapping
+- **Error Handler**: Multi-level error reporting with diagnostics
