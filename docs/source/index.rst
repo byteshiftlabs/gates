@@ -30,7 +30,7 @@ Features
 - Self-contained functions with return value propagation, plus structs with field access and arrays with indexing
 - VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
 - Multi-level error diagnostics with colored output (error/warning/note across 5 categories)
-- 76 unit, integration, and edge case tests (GoogleTest)
+- 81 unit, integration, structural validation, and edge case tests (GoogleTest)
 
 See :doc:`examples` for C-to-VHDL translation samples and :doc:`modules` for the
 complete source code reference.
