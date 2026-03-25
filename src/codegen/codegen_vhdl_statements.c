@@ -74,9 +74,7 @@ void generate_statement_block(ASTNode *node, void (*node_generator)(ASTNode*))
                 
             case NODE_BINARY_EXPR:
             case NODE_BINARY_OP:
-                emit_indented("result <= ");
-                node_generator(child);
-                emit_raw(";\n");
+                emit_expression_as_return(child, node, node_generator);
                 break;
                 
             default:
@@ -403,6 +401,20 @@ static void emit_expression_as_return(ASTNode *expression, ASTNode *parent_state
     if (is_struct_return_type && expression->value != NULL && is_plain)
     {
         emit_struct_field_copy_to_result(expression, parent_statement->parent);
+    }
+    else if (is_node_boolean_expression(expression))
+    {
+        emit_indented("if ");
+        emit_conditional_expression(expression, node_generator);
+        emit_raw(" then\n");
+        emit_indent_inc();
+        emit_line("result <= std_logic_vector(to_unsigned(1, %d));", VHDL_BIT_WIDTH);
+        emit_indent_dec();
+        emit_line("else");
+        emit_indent_inc();
+        emit_line("result <= std_logic_vector(to_unsigned(0, %d));", VHDL_BIT_WIDTH);
+        emit_indent_dec();
+        emit_line("end if;");
     }
     else
     {

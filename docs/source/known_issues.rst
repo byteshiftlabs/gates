@@ -47,8 +47,9 @@ VHDL Generation
    * - Medium
      - VHDL codegen does not optimize for hardware resources or timing. No
        resource sharing, pipelining, constant folding, or dead code elimination.
-     - Generated VHDL is functionally correct but may use more hardware than
-       necessary. Planned for Phase 5.
+     - Generated VHDL may use more hardware than necessary, and automated
+       simulator verification is not yet part of the regular test flow.
+       Planned for Phase 5.
    * - Low
      - Short-circuit evaluation (``&&`` / ``||``) uses pure combinational
        evaluation, not sequential C semantics.

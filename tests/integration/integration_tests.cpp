@@ -217,6 +217,18 @@ TEST_F(EndToEndTest, BinaryOperators) {
 }
 
 // -------------------------------------------------------------------
+// Comparison-valued returns must lower to numeric 1/0, not bare booleans
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, ComparisonReturnProducesNumericResultAssignment) {
+    const char *src = "int cmp(int a, int b) { return a == b; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+    EXPECT_NE(vhdl.find("if unsigned(a) = unsigned(b) then"), std::string::npos);
+    EXPECT_NE(vhdl.find("result <= std_logic_vector(to_unsigned(1, 32));"), std::string::npos);
+    EXPECT_NE(vhdl.find("result <= std_logic_vector(to_unsigned(0, 32));"), std::string::npos);
+}
+
+// -------------------------------------------------------------------
 // Void function
 // -------------------------------------------------------------------
 TEST_F(EndToEndTest, VoidFunction) {
