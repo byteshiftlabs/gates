@@ -1,71 +1,66 @@
 # Compi: C-to-VHDL Compiler
 
-Minimal C subset → VHDL translator. Focused on simple functions, control flow, expressions, and arrays to explore software → hardware mapping.
+Minimal C subset → VHDbuild/      — Build output (generated)
+```
 
-## Key Features (High-Level)
-* Tokenizer, recursive-descent parser, AST builder
-* Expressions with precedence (arith / shifts / bitwise / compare / logical / unary)
-* Control flow: `if / else if / else`, `while`, `for`, `break`, `continue`
-* Function calls: in expressions, statements, conditions, and nested calls
-* Structs: declarations, assignments, field access, and C-style initializers
-* Arrays with declarations, initializers, indexed access
-* Basic VHDL code generation (entity/architecture skeleton + signal mapping)
-* Type mapping: `int|float|double|char|struct` → suitable VHDL types
-* GoogleTest unit tests (auto-discovered via CTest)
-* Sphinx docs
+## 🚧 Known Limitations & Issues
+* Global variables not yet implemented
+* No C short-circuit evaluation for logical operators
+* Basic VHDL optimization (no resource tuning)
+* Limited struct support: no nested structs or arrays of structs yet
+* Potential signal naming collisions
 
-## 🛠️ Installation
+## ✅ Operator Coverage (Summary)for exploring software → hardware mapping.
+
+## Key Features
+* **Parser**: Tokenizer, recursive-descent parser, AST builder
+* **Expressions**: Full precedence (arithmetic, shifts, bitwise, comparison, logical, unary)
+* **Control Flow**: `if/else`, `while`, `for`, `break`, `continue`
+* **Functions**: Calls in expressions, statements, conditions, and nested
+* **Data Types**: Structs (declarations, field access, initializers) and arrays
+* **Code Generation**: VHDL entity/architecture with signal mapping
+* **Error Handling**: Multi-level diagnostics with source context, hints, and suggestions
+* **Testing**: 35 GoogleTest unit tests via CTest
+* **Documentation**: Comprehensive Sphinx docs
+
+## 🛠️ Quick Start
 
 ```bash
 git clone https://github.com/cmelnu/compi.git
-cd compi
-mkdir build
-cd build
-cmake ..
-make
-```
-
-## ▶️ Usage
-
-```bash
+cd compi && mkdir build && cd build
+cmake .. && make
 ./compi input.c output.vhdl
 ```
 
-**Developer Debug Output:**
-
-To enable verbose debug output for developers, configure the build with the `-DDEBUG=ON` argument:
-
+**Debug Mode** (verbose output):
 ```bash
-cmake -DDEBUG=ON ..
-make
+cmake -DDEBUG=ON .. && make
 ```
-
-This will provide additional debug prints and diagnostics during parsing and code generation.
 
 ## 🧪 Testing
 
 ```bash
+./run_tests.sh              # Quick: build + run all tests
+./build_docs.sh             # Build Sphinx documentation
+```
+
+**Advanced**:
+```bash
 cmake -S . -B build -DENABLE_TESTING=ON
 cmake --build build --target test_all -j 4
 ctest --test-dir build --output-on-failure
-```
-Shortcuts:
-```bash
-./run_tests.sh              # build + run tests
-./build_docs.sh             # build Sphinx docs
-./build/compi_tests --gtest_filter=TokenTests.BasicLexing  # single test
+./build/compi_tests --gtest_filter=ErrorHandlerTest.*  # Run specific tests
 ```
 
 ## 🗂️ Project Structure
 
-- `src/` — Source code (.c, .h files)
-- `examples/` — Example C files for testing
-- `docs/` — Sphinx documentation
-- `build/` — Build output
-- `run_tests.sh` — Helper to configure (if needed), build, and run all tests
-- `build_docs.sh` — Helper to configure (if needed) and build Sphinx HTML docs
-- `CMakeLists.txt` — Build configuration
-- `.gitignore` — Git ignore rules
+```
+src/        — Source code (parser, lexer, codegen, error handler)
+examples/   — Example C files and demos
+docs/       — Sphinx documentation
+tests/      — GoogleTest unit tests
+build/      — Build output (generated)
+```
 
 ## 🚧 Known Issues
 * Global variables not yet implemented
@@ -77,5 +72,5 @@ Shortcuts:
 ## ✅ Operator Coverage (Summary)
 Arithmetic, shifts, bitwise, comparisons, logical (no short‑circuit semantics), unary minus / logical not, control flow + arrays.
 
-## 🗺️ Roadmap (Short)
+## 🗺️ Roadmap
 Next focus areas: global vars, nested structs, arrays of structs, better diagnostics, naming & optimization improvements, integration & coverage tests. Full details: see docs (architecture / roadmap sections).
