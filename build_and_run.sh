@@ -25,9 +25,9 @@
 #   -h, --help           Show help
 #
 # Examples:
-#   ./build_and_run.sh -d -- -i sample.dds
-#   ./build_and_run.sh --tests
-#   ./build_and_run.sh --build-dir build-debug -d
+#   ./build_and_run.sh -- examples/example.c output.vhdl
+#   ./build_and_run.sh --tests -- examples/example.c output.vhdl
+#   ./build_and_run.sh --build-dir build-debug -d -- examples/example.c output.vhdl
 #
 set -euo pipefail
 IFS=$'\n\t'

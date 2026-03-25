@@ -1,6 +1,7 @@
 // VHDL Code Generator - Type and Signal Declarations Implementation
 // -------------------------------------------------------------
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -108,6 +109,8 @@ static void emit_array_initializer_constant(const ASTNode *var_decl, ASTNode *in
             char bit_string[BITSTRING_BUFFER_SIZE] = {0};
             int numeric_value = 0;
             int bit_position = 0;
+            int source_bit_width = (int)(sizeof(unsigned int) * CHAR_BIT);
+            unsigned int raw_bits = 0U;
             if (!safe_strtoi(element_value, &numeric_value))
             {
                 log_error(ERROR_CATEGORY_CODEGEN, 0,
@@ -115,11 +118,24 @@ static void emit_array_initializer_constant(const ASTNode *var_decl, ASTNode *in
                           element_value);
                 continue;
             }
+
+            raw_bits = (unsigned int)numeric_value;
             
             for (bit_position = VHDL_BIT_WIDTH - 1; bit_position >= 0; --bit_position)
             {
                 int bit_index = (VHDL_BIT_WIDTH - 1) - bit_position;
-                bit_string[bit_index] = (((unsigned int)numeric_value >> bit_position) & 1) ? '1' : '0';
+                int bit_value = 0;
+
+                if (bit_position >= source_bit_width)
+                {
+                    bit_value = (numeric_value < 0) ? 1 : 0;
+                }
+                else
+                {
+                    bit_value = ((raw_bits >> bit_position) & 1U) ? 1 : 0;
+                }
+
+                bit_string[bit_index] = bit_value ? '1' : '0';
             }
             bit_string[VHDL_BIT_WIDTH] = '\0';
             

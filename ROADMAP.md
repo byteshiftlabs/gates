@@ -18,7 +18,7 @@ This document outlines the planned features, improvements, and milestones for Ga
 - Multi-level error diagnostics (error/warning/note × 5 categories)
 - Source location tracking with line/column reporting
 - Colored terminal output (ANSI: red errors, yellow warnings, blue notes)
-- Unit, integration, and edge case test suite (74 tests, GoogleTest)
+- Unit, integration, and edge case test suite (75 tests, GoogleTest)
 - Signal naming collision handling (`emit_mapped_signal_name()` with `_local` suffix, PR #12)
 
 ### 📋 Planned
@@ -70,14 +70,14 @@ This document outlines the planned features, improvements, and milestones for Ga
 
 ## Phase 3: Testing Infrastructure
 
-Code coverage and fuzz testing must come *before* adding complex features — you need coverage data to know where the gaps are, and fuzz testing catches parser bugs that haunt you later.
+Code coverage and fuzz testing must come *before* adding complex features — you need coverage data to know where the gaps are, and fuzz testing catches parser bugs that haunt you later. VHDL simulator verification remains planned infrastructure work, but it is not a prerequisite for the current public release while the simulator is still under development.
 
 - [ ] **Code coverage reporting**
   Track which lines/branches are exercised by tests to find gaps. Use gcov/lcov with CMake.
 - [ ] **Fuzz testing for parser robustness**
   Feed random/malformed inputs to catch crashes and edge cases. AFL or libFuzzer.
 - [ ] **VHDL simulation verification**
-  Run generated VHDL through a simulator (GHDL/ModelSim) to validate behavior.
+  Run generated VHDL through a simulator (GHDL/ModelSim) once the simulator path is ready, to add post-release behavioral validation.
 - [ ] **Benchmark suite for complex inputs**
   Measure compile time and output quality on realistic, larger programs.
 
