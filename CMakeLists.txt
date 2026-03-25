@@ -64,6 +64,7 @@ target_compile_definitions(gates_gtest PUBLIC
 
 add_executable(gates ${GATES_MAIN_SRC})
 target_link_libraries(gates PRIVATE gates_gtest)
+target_compile_definitions(gates PRIVATE GATES_VERSION="${PROJECT_VERSION}")
 
 # Add compiler warnings
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

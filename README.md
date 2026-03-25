@@ -3,7 +3,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Language: C11](https://img.shields.io/badge/Language-C11-blue.svg)
 ![Build: CMake](https://img.shields.io/badge/Build-CMake_3.14+-orange.svg)
-![Tests: 74 passing](https://img.shields.io/badge/Tests-74_passing-brightgreen.svg)
+![Tests: 75 passing](https://img.shields.io/badge/Tests-75_passing-brightgreen.svg)
 ![cppcheck: clean](https://img.shields.io/badge/cppcheck-clean-brightgreen.svg)
 
 Minimal C subset → VHDL translator
@@ -15,6 +15,7 @@ git clone https://github.com/byteshiftlabs/gates.git
 cd gates && mkdir build && cd build
 cmake .. && make
 ./gates input.c output.vhdl
+./gates --version
 ```
 
 ## Example
@@ -72,7 +73,7 @@ Each C function becomes a VHDL entity with clock/reset ports, input parameters a
 - Functions with return value propagation, structs, and arrays
 - VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
 - Multi-level error diagnostics (error/warning/note across 5 categories)
-- 74 unit, integration, and edge case tests (GoogleTest)
+- 75 unit, integration, and edge case tests (GoogleTest)
 
 ## Requirements
 
@@ -113,7 +114,7 @@ examples/      — Sample C input files
 - No nested structs or arrays of structs
 - No pointer support
 - No `switch/case` or `do-while`
-- VHDL output is functionally correct but unoptimized — no resource sharing, no pipelining, no constant folding (see [ROADMAP.md](ROADMAP.md) Phase 4 for planned optimizations)
+- Generated VHDL targets the currently supported C subset, but automated simulator verification is not yet part of the test/CI flow. The output is also unoptimized — no resource sharing, no pipelining, no constant folding (see [ROADMAP.md](ROADMAP.md) Phase 4 for planned optimizations)
 
 ## Documentation
 
