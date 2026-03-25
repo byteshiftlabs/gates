@@ -64,7 +64,7 @@ Tokens are represented by the ``Token`` struct defined in ``include/token.h``:
 **Fields:**
 
 * ``type``: The category of the token (keyword, identifier, operator, etc.)
-* ``value``: The actual text of the token (fixed-size buffer of ``TOKEN_VALUE_SIZE`` bytes)
+* ``value``: The actual text of the token (stored in a fixed-size buffer)
 * ``line``: Line number where the token appears (for error messages)
 
 Token Types
@@ -94,7 +94,7 @@ The lexer recognizes 13 distinct token types defined in ``include/token.h``:
 
 * Operators are unified into a single ``TOKEN_OPERATOR`` type. The actual operator is distinguished by the token's ``value`` field.
 * Keywords are identified after tokenization by checking against a keyword table.
-* Punctuation characters have dedicated token types for efficient parsing.
+* Punctuation characters have dedicated token types for straightforward parsing.
 
 Keyword Recognition
 -------------------
