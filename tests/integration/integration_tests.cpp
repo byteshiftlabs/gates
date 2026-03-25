@@ -145,6 +145,28 @@ TEST_F(EndToEndTest, ForLoop) {
     EXPECT_NE(vhdl.find("<="), std::string::npos);
 }
 
+TEST_F(EndToEndTest, NestedLoopVariablesAreDeclaredAndReset) {
+    const char *src =
+        "int nested(int outer, int inner) {"
+        "  int i = 0;"
+        "  int total = 0;"
+        "  while (i < outer) {"
+        "    int j = 0;"
+        "    while (j < inner) {"
+        "      total = total + i + j;"
+        "      j = j + 1;"
+        "    }"
+        "    i = i + 1;"
+        "  }"
+        "  return total;"
+        "}";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+    EXPECT_NE(vhdl.find("signal j : std_logic_vector(31 downto 0);"), std::string::npos);
+    EXPECT_NE(vhdl.find("j <= (others => '0');"), std::string::npos);
+    EXPECT_NE(vhdl.find("while unsigned(j) < unsigned(inner) loop"), std::string::npos);
+}
+
 // -------------------------------------------------------------------
 // Array declaration and access
 // -------------------------------------------------------------------
