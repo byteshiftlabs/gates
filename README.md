@@ -3,8 +3,6 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Language: C11](https://img.shields.io/badge/Language-C11-blue.svg)
 ![Build: CMake](https://img.shields.io/badge/Build-CMake_3.14+-orange.svg)
-![Tests: 81 passing](https://img.shields.io/badge/Tests-81_passing-brightgreen.svg)
-![cppcheck: clean](https://img.shields.io/badge/cppcheck-clean-brightgreen.svg)
 
 Minimal C subset → VHDL translator
 
@@ -73,7 +71,7 @@ Each C function becomes a VHDL entity with clock/reset ports, input parameters a
 - Self-contained functions with return value propagation, plus structs and arrays
 - VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
 - Multi-level error diagnostics (error/warning/note across 5 categories)
-- 81 unit, integration, structural validation, and edge case tests (GoogleTest)
+- GoogleTest-based unit, integration, structural validation, and edge case coverage
 
 ## Requirements
 
@@ -115,7 +113,7 @@ examples/      — Sample C input files
 - No pointer support
 - No `switch/case` or `do-while`
 - Function calls are parsed, but cross-function hardware wiring is not yet synthesized. Multi-function files emit independent entities, so keep hardware-generating examples self-contained.
-- Generated VHDL targets the currently supported C subset. Structural well-formedness is verified by self-contained validation tests (balanced constructs, declared signals, proper type wrapping). The output is unoptimized — no resource sharing, no pipelining, no constant folding (see [ROADMAP.md](ROADMAP.md) Phase 4 for planned optimizations)
+- Generated VHDL targets the currently supported C subset. Structural well-formedness is verified by self-contained validation tests (balanced constructs, declared signals, proper type wrapping). Current output does not perform resource sharing, pipelining, or constant folding (see [ROADMAP.md](ROADMAP.md) for planned future work)
 
 ## Documentation
 
