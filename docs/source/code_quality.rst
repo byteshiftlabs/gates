@@ -213,12 +213,11 @@ parse_expression.c
      size_t copy_length = strlen(source);
      char full_expression_buffer[FULL_EXPRESSION_BUFFER_SIZE];
 
-**Impact:**
+**Result:**
 
-* 80% reduction in main function size
-* Each helper function is easily testable in isolation
-* Clear separation between different expression types
-* Much easier to understand and maintain
+* Each helper function can be tested in isolation
+* Expression handling is separated into focused helpers
+* The control flow is easier to follow and modify
 
 parse_statement.c
 ~~~~~~~~~~~~~~~~~
@@ -275,13 +274,12 @@ parse_statement.c
      ASTNode *struct_node, *field_node;
      int index_value, array_size;
 
-**Impact:**
+**Result:**
 
-* 87% reduction in main function size
-* Each statement type has dedicated, testable function
-* Much clearer control flow
-* Easy to add new statement types
-* Dramatically improved maintainability
+* Each statement type has a dedicated, testable function
+* Control flow is easier to trace
+* New statement types can be added within the existing structure
+* Maintenance work is localized to smaller helpers
 
 parse_function.c
 ~~~~~~~~~~~~~~~~
@@ -590,12 +588,12 @@ The refactoring effort delivered significant improvements:
 * Pattern is established and consistent
 * New contributors can easily follow established style
 
-**Quality Metrics:**
+**Observed outcomes:**
 
-* Average function length reduced by 70-85%
-* Cyclomatic complexity reduced significantly
-* Code duplication eliminated
-* Named constants replace all magic numbers
+* Helper functions are shorter and more focused
+* Named constants replace magic numbers in the refactored areas
+* Repeated parsing patterns were extracted into shared helpers
+* Control-flow handling follows a consistent structure across modules
 
 Future Refactoring Opportunities
 ---------------------------------
@@ -629,7 +627,7 @@ Areas for potential future improvement:
 Conclusion
 ----------
 
-The comprehensive refactoring of the parser modules has transformed the codebase from a collection of monolithic functions into a well-organized, maintainable, and extensible foundation. The established patterns and principles provide a clear model for future development and make the compiler significantly easier to understand, modify, and extend.
+The parser refactoring replaced large monolithic functions with smaller helpers and clearer module boundaries. The resulting structure provides a concrete model for future changes and makes the compiler easier to review, modify, and extend.
 
 The refactoring demonstrates that **code quality is not just about correctness** — it's about creating code that is:
 
@@ -637,6 +635,6 @@ The refactoring demonstrates that **code quality is not just about correctness**
 * Easy to modify
 * Easy to test
 * Easy to extend
-* A pleasure to work with
+* Consistent with the surrounding codebase
 
 These improvements lay a solid foundation for future compiler enhancements and serve as a model for maintaining high code quality throughout the project.
