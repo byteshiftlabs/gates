@@ -494,7 +494,7 @@ Why Variadic Functions?
 Printf-style variadic functions (``...``) are used because:
 
 1. Familiar interface for C programmers
-2. Efficient string formatting
+2. Formatted string composition without custom message builders
 3. Type-safe with compiler warnings
 4. Flexible message composition
 

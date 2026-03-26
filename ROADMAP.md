@@ -18,7 +18,7 @@ This document outlines the planned features, improvements, and milestones for Ga
 - Multi-level error diagnostics (error/warning/note × 5 categories)
 - Source location tracking with line/column reporting
 - Colored terminal output (ANSI: red errors, yellow warnings, blue notes)
-- Unit, integration, and edge case test suite (75 tests, GoogleTest)
+- Unit, integration, structural validation, and edge case test coverage (GoogleTest)
 - Signal naming collision handling (`emit_mapped_signal_name()` with `_local` suffix, PR #12)
 
 ### 📋 Planned
