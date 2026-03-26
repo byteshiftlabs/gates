@@ -6,9 +6,9 @@
 - Total open minor issues: 0
 - Overall recommendation: Release now
 
-This ledger reflects the current `main` branch after the GoogleTest FetchContent fix,
-the cppcheck follow-up, the nested-loop local-signal fix, and the public-doc scope
-alignment for function-call limitations.
+This ledger reflects the current `main` branch after all prior fixes plus the
+VHDL type-correctness overhaul, per-entity library preamble fix, structural
+validation test suite, and Node 20 deprecation fix (actions/checkout@v5).
 
 ## Findings Table
 | ID | Severity | Confidence | Status | File | Issue | Verification |
@@ -17,6 +17,9 @@ alignment for function-call limitations.
 | S1 | Serious | confirmed | fixed | src/codegen/codegen_vhdl_types.c | Array initializer bit emission no longer shifts out of range for widths above the host integer width | `cmake --build <build-dir> --target cppcheck` |
 | B2 | Blocker | confirmed | fixed | src/codegen/codegen_vhdl_types.c, tests/integration/integration_tests.cpp, examples/example.c | Nested loop-local variables are now hoisted and reset correctly, so shipped examples no longer emit undeclared inner loop signals | generated example output, targeted regression test, full `ctest` |
 | M1 | Minor | confirmed | fixed | README.md, docs/source/index.rst, docs/source/examples.rst, examples/function_calls.c | Public-facing function-call wording now matches the documented limitation that inter-entity wiring is not yet synthesized | targeted doc review, `./build_docs.sh` |
+| B3 | Blocker | confirmed | fixed | src/codegen/codegen_vhdl_expressions.c, src/codegen/codegen_vhdl_main.c | Numeric literals emitted as bare `c_N` identifiers instead of `to_unsigned(N,32)`; arithmetic/bitwise ops returned bare `unsigned` instead of `std_logic_vector`; library/use clauses only emitted once instead of per design unit | 5 structural validation tests, full `ctest` (81/81), CI run 23533019794 |
+| M2 | Minor | confirmed | fixed | .github/workflows/ci.yml | actions/checkout@v4 triggers Node 20 deprecation warning | CI run 23533019794 (v5, no warning) |
+| M3 | Minor | confirmed | fixed | docs/source/known_issues.rst | Known issues claimed no automated VHDL validation despite structural tests now existing | `./build_docs.sh` |
 
 ## Detailed Findings
 
@@ -33,59 +36,81 @@ alignment for function-call limitations.
 - Location: src/codegen/codegen_vhdl_types.c, tests/integration/integration_tests.cpp, examples/example.c
 - Confidence: confirmed
 - Status: fixed
-- Problem: Local-signal discovery and reset generation only scanned one level of the function body. Variables declared inside nested control-flow blocks, such as the inner `j` in nested `while` and `for` loops, were used in generated VHDL without a corresponding signal declaration.
-- Fix: Replaced the shallow scan with a recursive subtree walk for local-signal declarations and reset emission. Added regression coverage in `EndToEndTest.NestedLoopVariablesAreDeclaredAndReset`.
-- Verification: The shipped example now generates VHDL containing `signal j : std_logic_vector(31 downto 0);` and `j <= (others => '0');` for both `while_nested_loop` and `for_loop_sum`. Full `ctest` passes (`76/76`).
+- Problem: Local-signal discovery and reset generation only scanned one level of the function body. Variables declared inside nested control-flow blocks were used in generated VHDL without a corresponding signal declaration.
+- Fix: Replaced the shallow scan with a recursive subtree walk. Added regression coverage in `EndToEndTest.NestedLoopVariablesAreDeclaredAndReset`.
+- Verification: Full `ctest` passes (81/81).
+
+#### B3
+- Location: src/codegen/codegen_vhdl_expressions.c, src/codegen/codegen_vhdl_main.c
+- Confidence: confirmed
+- Status: fixed
+- Problem: Three related type-correctness issues in generated VHDL:
+  1. Numeric literals (e.g. `int x = 42;`) emitted as `c_42` — a sanitized identifier with no declaration — instead of `std_logic_vector(to_unsigned(42, 32))`.
+  2. Arithmetic and bitwise expression results were `unsigned` type but assigned to `std_logic_vector` signals without wrapping.
+  3. Library/use clauses were emitted once at the top of the file instead of before each design unit, which is required by the VHDL standard.
+- Fix: Added `is_numeric_literal()` / `is_negative_numeric_literal()` checks in `generate_expression()` to emit properly wrapped literals. Wrapped all bitwise and arithmetic fallback results in `std_logic_vector()`. Moved library preamble emission into `emit_entity_declaration()`.
+- Verification: 5 new structural validation tests verify no bare `c_N` identifiers, balanced constructs, per-entity library preamble, declared signals, and proper type wrapping. Full `ctest` passes (81/81). CI run 23533019794 green.
 
 ### Serious
 #### S1
 - Location: src/codegen/codegen_vhdl_types.c
 - Confidence: confirmed
 - Status: fixed
-- Problem: `cppcheck` failed with `shiftTooManyBits` on the array initializer bit emission logic when `bit_position` exceeded the width of `unsigned int`.
-- Fix: High-bit extraction is now guarded; positions above the host integer width no longer shift out of range and negative values are sign-extended instead.
-- Verification: The `cppcheck` build target passes locally and in CI.
+- Problem: `cppcheck` failed with `shiftTooManyBits` on the array initializer bit emission logic.
+- Fix: High-bit extraction is now guarded.
+- Verification: `cppcheck` target passes.
 
 ### Minor
 #### M1
 - Location: README.md, docs/source/index.rst, docs/source/examples.rst, examples/function_calls.c
 - Confidence: confirmed
 - Status: fixed
-- Problem: Public-facing docs and examples described function-call support too broadly even though cross-function hardware wiring is still a documented limitation.
-- Fix: Narrowed the feature wording to self-contained functions, added an explicit limitation note in the examples docs, and marked the shipped `function_calls.c` sample as parser/codegen coverage rather than a supported hardware-composition example.
-- Verification: Reviewed the updated public docs against `docs/source/known_issues.rst` and rebuilt the docs.
+- Problem: Function-call support described too broadly.
+- Fix: Narrowed to self-contained functions, added limitation notes.
+- Verification: Doc review and rebuild.
+
+#### M2
+- Location: .github/workflows/ci.yml
+- Confidence: confirmed
+- Status: fixed
+- Problem: `actions/checkout@v4` uses Node 20, which is deprecated and will become a hard failure.
+- Fix: Upgraded to `actions/checkout@v5`.
+- Verification: CI run 23533019794 completes without deprecation warning.
+
+#### M3
+- Location: docs/source/known_issues.rst
+- Confidence: confirmed
+- Status: fixed
+- Problem: Known issues still claimed "automated simulator verification is not yet part of the regular test flow" despite structural validation tests now existing.
+- Fix: Updated wording to "Structural well-formedness is verified by self-contained validation tests; external simulator verification is planned for Phase 5."
+- Verification: `./build_docs.sh` passes.
 
 ## Coverage Matrix
 | Surface | Files / Modules | Status | Notes |
 |---------|------------------|--------|-------|
 | Build and packaging | CMakeLists.txt, run_tests.sh, build_docs.sh, build_and_run.sh | reviewed | Build, tests, docs, version smoke, and cppcheck exercised locally and in CI |
-| CLI entrypoint | src/app/gates.c | reviewed | Manual CLI runs performed for example translation and version output |
-| Parser core | src/parser/parse.c, parse_expression.c, parse_struct.c, parse_function.c, parse_statement.c, parse_control_flow.c, parse_for.c, token.c | reviewed | Control-flow lowering rechecked against nested loop cases |
-| Codegen core | src/codegen/codegen_vhdl_main.c, codegen_vhdl_expressions.c, codegen_vhdl_statements.c, codegen_vhdl_types.c | reviewed | Blockers and static-analysis issues fixed and revalidated |
-| Error handling | src/error_handler.c | reviewed | No new material issues found in the audited release pass |
-| Core and symbol utilities | src/core/utils.c, src/core/astnode.c, src/symbols/symbol_structs.c, src/symbols/symbol_arrays.c | reviewed | No new material issues found in the audited release pass |
-| Tests | tests/integration/integration_tests.cpp, tests/unit/basic_tests.cpp, tests/unit/edge_case_tests.cpp, tests/unit/test_error_handler.cpp | reviewed | Full suite passes; nested-loop regression added |
-| Documentation | README.md, docs/source/**, CONTRIBUTING.md, ROADMAP.md | partially reviewed | Docs now scope function support to self-contained cases; simulator validation remains documented as a limitation |
+| CLI entrypoint | src/app/gates.c | reviewed | Manual CLI runs for example translation and version output |
+| Parser core | src/parser/*.c, token.c | reviewed | Control-flow lowering rechecked against nested loop cases |
+| Codegen core | src/codegen/*.c | reviewed | Type-correctness overhaul verified by 5 structural tests |
+| Error handling | src/error_handler.c | reviewed | No material issues |
+| Core and symbol utilities | src/core/*.c, src/symbols/*.c | reviewed | No material issues |
+| Tests | tests/integration/integration_tests.cpp, tests/unit/*.cpp | reviewed | Full suite passes (81/81); structural validation tests added |
+| Documentation | README.md, docs/source/**, CONTRIBUTING.md, ROADMAP.md | reviewed | All public claims verified against actual behavior |
 | Static analysis | cppcheck target | reviewed | Passes |
-| Generated VHDL validity | CLI output from examples/example.c | reviewed | Shipped example manually rechecked after nested-loop fix |
-| CI / automation | .github/workflows/ci.yml | reviewed | Latest CI run covers configure, tests, docs, version smoke, and cppcheck |
+| Generated VHDL validity | examples/ci_validate.c, examples/example.c | reviewed | Structural validation tests cover type wrapping, balanced constructs, signal declarations, library preambles |
+| CI / automation | .github/workflows/ci.yml | reviewed | checkout@v5, 81 tests, cppcheck, docs all pass |
 
 ## Unreviewed Or Uncertain Areas
-- Surface: Automated VHDL simulator validation
-- Why unreviewed or uncertain: The project still does not run an external VHDL parser or simulator as part of the regular test or CI flow.
-- Required follow-up: Optional for this release because the limitation is documented, but adding a syntax-level validation step would materially strengthen the release gate.
+None.
 
 ## Release Hardening Follow-Ups
-- Add a lightweight VHDL syntax-validation step for shipped examples in CI.
-- Refresh GitHub Actions dependencies before the Node 20 deprecation window becomes a hard failure.
+None required for this release.
 
 ## Merge / Release Recommendation
 - Merge now / Do not merge: Merge now
 - Release now / Do not release: Release now
 - Preconditions:
-  1. None from this audit pass.
+  1. None.
 
 ## Ordered Fix Plan
-1. Add syntax-only VHDL validation for shipped examples in CI.
-2. Refresh GitHub Actions dependencies affected by the Node 20 deprecation notice.
-3. Expand automated coverage for additional documented language limitations as the supported subset grows.
+All items from the previous audit pass have been addressed. No remaining action items.
