@@ -92,6 +92,31 @@ Each C function becomes a VHDL entity with clock/reset ports, input parameters a
 ./build_docs.sh   # Build documentation
 ```
 
+## Docker
+
+Build an interactive development image:
+
+```bash
+docker build -t gates-dev .
+docker run --rm -it -v "$PWD":/workspace gates-dev
+```
+
+Run full validation during image build:
+
+```bash
+docker build --build-arg RUN_VALIDATION=1 -t gates-validated .
+```
+
+Inside the container, use the existing project scripts:
+
+```bash
+cmake -S . -B build -DENABLE_TESTING=ON
+cmake --build build --target gates -j"$(nproc)"
+./run_tests.sh
+./build_docs.sh
+./build/gates examples/example.c output.vhdl
+```
+
 ## Project Structure
 
 ```
