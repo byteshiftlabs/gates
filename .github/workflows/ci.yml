@@ -4,12 +4,21 @@ on:
   push:
     branches:
       - main
-      - '**'
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build-test-docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      BUILD_DIR: build
 
     steps:
       - name: Checkout
@@ -18,25 +27,43 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cppcheck python3-sphinx python3-sphinx-rtd-theme
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            cppcheck \
+            python3-sphinx \
+            python3-sphinx-rtd-theme
 
       - name: Configure
-        run: cmake -S . -B build -DENABLE_TESTING=ON
+        run: cmake -S . -B "$BUILD_DIR" -DENABLE_TESTING=ON
 
       - name: Build tests
-        run: cmake --build build --target gates_tests -j 2
+        run: cmake --build "$BUILD_DIR" --target gates_tests -j 2
 
       - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir "$BUILD_DIR" --output-on-failure
 
       - name: Build executable
-        run: cmake --build build --target gates -j 2
+        run: cmake --build "$BUILD_DIR" --target gates -j 2
 
-      - name: Version smoke test
-        run: ./build/gates --version
+      - name: Run executable smoke tests
+        run: |
+          ./$BUILD_DIR/gates --version
+          ./$BUILD_DIR/gates examples/example.c /tmp/example.vhdl
+          test -s /tmp/example.vhdl
 
       - name: Build docs
         run: ./build_docs.sh
 
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gates-docs-html
+          path: docs/build/html
+          if-no-files-found: error
+
       - name: Run cppcheck
-        run: cmake --build build --target cppcheck
+        run: cmake --build "$BUILD_DIR" --target cppcheck
+
+      - name: Build Docker image
+        run: docker build -t gates-ci -f Dockerfile .
