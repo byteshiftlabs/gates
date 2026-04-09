@@ -9,7 +9,7 @@ Minimal C subset → VHDL
 * Limited struct support: no nested structs or arrays of structs yet
 
 ## 🗺️ Roadmap
-Global variables, nested structs, arrays of structs, enhanced diagnostics, VHDL optimizations. See full docs for details.r exploring software → hardware mapping.
+Global variables, nested structs, arrays of structs, enhanced diagnostics, VHDL optimizations. See full docs for details.
 
 ## Key Features
 * **Parser**: Tokenizer, recursive-descent parser, AST builder
