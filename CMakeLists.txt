@@ -129,9 +129,9 @@ if(ENABLE_TESTING)
     message(STATUS "GTest not found via package manager; fetching v1.14.0")
     FetchContent_Declare(
       googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG f8d7d77c06936315286eb55f8de22cd23c188571
-        GIT_SHALLOW TRUE
+      GIT_REPOSITORY https://github.com/google/googletest.git
+      GIT_TAG f8d7d77c06936315286eb55f8de22cd23c188571
+      GIT_SHALLOW TRUE
     )
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
