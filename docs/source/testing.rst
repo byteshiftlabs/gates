@@ -27,6 +27,9 @@ Quick Start
 
 .. code-block:: bash
 
+  # Full repository validation (same script used by Docker/CI)
+  ./run_validation.sh
+
    # Configure with tests enabled (default ENABLE_TESTING=ON)
    cmake -S . -B build -DENABLE_TESTING=ON
 
@@ -35,6 +38,8 @@ Quick Start
 
    # Or use the helper script (configures if needed)
    ./run_tests.sh
+
+The authoritative public validation path is ``./run_validation.sh``. GitHub Actions runs that script inside the repository Docker image, so local Docker verification and CI share the same command surface.
 
 Running Tests
 -------------
@@ -204,3 +209,8 @@ Planned Enhancements
 
 * Coverage reporting (gcov / lcov) optional target
 * Test fixtures around global state
+
+Current Boundary
+----------------
+
+The current validation contract stops at parser/codegen correctness, structural VHDL checks, smoke translation of the curated positive examples, documentation build health, and ``cppcheck``. External simulator or synthesis validation is intentionally out of scope until it is added to the public automation.

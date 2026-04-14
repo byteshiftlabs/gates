@@ -24,13 +24,7 @@ WORKDIR /workspace
 COPY . /workspace
 
 RUN if [ "$RUN_VALIDATION" = "1" ]; then \
-      cmake -S /workspace -B "$BUILD_DIR" -DENABLE_TESTING=ON && \
-      cmake --build "$BUILD_DIR" --target gates_tests -j"$(nproc)" && \
-      ctest --test-dir "$BUILD_DIR" --output-on-failure && \
-      cmake --build "$BUILD_DIR" --target gates -j"$(nproc)" && \
-      "$BUILD_DIR"/gates --version && \
-      cmake --build "$BUILD_DIR" --target docs -j"$(nproc)" && \
-      cmake --build "$BUILD_DIR" --target cppcheck; \
+    BUILD_DIR="$BUILD_DIR" JOBS="$(nproc)" ./run_validation.sh; \
     fi
 
 CMD ["/bin/bash"]
