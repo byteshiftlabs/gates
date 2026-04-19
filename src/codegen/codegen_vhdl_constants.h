@@ -6,20 +6,27 @@
 #ifndef CODEGEN_VHDL_CONSTANTS_H
 #define CODEGEN_VHDL_CONSTANTS_H
 
-// -------------------------------------------------------------
-// Buffer size constants
-// -------------------------------------------------------------
-#define MAX_PARAMETERS 128
-#define MAX_BUFFER_SIZE 256
-#define ARRAY_NAME_BUFFER_SIZE 64
-#define ARRAY_INDEX_BUFFER_SIZE 64
-#define ARRAY_SIZE_BUFFER_SIZE 32
-#define BITSTRING_BUFFER_SIZE 40
+#include "config.h"  // User-configurable limits
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // -------------------------------------------------------------
-// VHDL type constants
+// Buffer size constants (use config values)
 // -------------------------------------------------------------
-#define VHDL_BIT_WIDTH 32
+#define MAX_PARAMETERS COMPI_MAX_PARAMETERS
+#define MAX_BUFFER_SIZE COMPI_MAX_BUFFER_SIZE
+#define ARRAY_NAME_BUFFER_SIZE COMPI_ARRAY_NAME_BUFFER_SIZE
+#define ARRAY_INDEX_BUFFER_SIZE 64
+#define ARRAY_SIZE_BUFFER_SIZE 32
+// Bitstring buffer: VHDL_BIT_WIDTH binary digits + quotes + null + safety margin
+#define BITSTRING_BUFFER_SIZE (COMPI_VHDL_BIT_WIDTH + 8)
+
+// -------------------------------------------------------------
+// VHDL type constants (use config value)
+// -------------------------------------------------------------
+#define VHDL_BIT_WIDTH COMPI_VHDL_BIT_WIDTH
 
 // -------------------------------------------------------------
 // Array index constants
@@ -30,57 +37,66 @@
 // -------------------------------------------------------------
 // String constants
 // -------------------------------------------------------------
-extern const char *RESERVED_PORT_NAME_RESULT;
-extern const char *SIGNAL_SUFFIX_LOCAL;
-extern const char *UNKNOWN_IDENTIFIER;
-extern const char *STRUCT_INIT_MARKER;
-extern const char *ARRAY_INIT_MARKER;
-extern const char *DEFAULT_FUNCTION_NAME;
-extern const char *DEFAULT_ZERO_VALUE;
-extern const char *VHDL_FALSE;
+extern const char * const RESERVED_PORT_NAME_RESULT;
+extern const char * const SIGNAL_SUFFIX_LOCAL;
+extern const char * const UNKNOWN_IDENTIFIER;
+extern const char * const STRUCT_INIT_MARKER;
+extern const char * const ARRAY_INIT_MARKER;
+extern const char * const DEFAULT_FUNCTION_NAME;
+extern const char * const DEFAULT_ZERO_VALUE;
+extern const char * const VHDL_FALSE;
+
+// VHDL port name constants (centralized to avoid scattered magic strings)
+extern const char * const VHDL_PORT_CLK;
+extern const char * const VHDL_PORT_RESET;
+extern const char * const VHDL_PORT_RESULT;
 
 // -------------------------------------------------------------
 // C operator constants
 // -------------------------------------------------------------
-extern const char *OP_EQUAL;
-extern const char *OP_NOT_EQUAL;
-extern const char *OP_LESS_THAN;
-extern const char *OP_LESS_EQUAL;
-extern const char *OP_GREATER_THAN;
-extern const char *OP_GREATER_EQUAL;
-extern const char *OP_LOGICAL_AND;
-extern const char *OP_LOGICAL_OR;
-extern const char *OP_LOGICAL_NOT;
-extern const char *OP_BITWISE_AND;
-extern const char *OP_BITWISE_OR;
-extern const char *OP_BITWISE_XOR;
-extern const char *OP_BITWISE_NOT;
-extern const char *OP_SHIFT_LEFT;
-extern const char *OP_SHIFT_RIGHT;
+extern const char * const OP_EQUAL;
+extern const char * const OP_NOT_EQUAL;
+extern const char * const OP_LESS_THAN;
+extern const char * const OP_LESS_EQUAL;
+extern const char * const OP_GREATER_THAN;
+extern const char * const OP_GREATER_EQUAL;
+extern const char * const OP_LOGICAL_AND;
+extern const char * const OP_LOGICAL_OR;
+extern const char * const OP_LOGICAL_NOT;
+extern const char * const OP_BITWISE_AND;
+extern const char * const OP_BITWISE_OR;
+extern const char * const OP_BITWISE_XOR;
+extern const char * const OP_BITWISE_NOT;
+extern const char * const OP_SHIFT_LEFT;
+extern const char * const OP_SHIFT_RIGHT;
 
 // -------------------------------------------------------------
 // VHDL operator constants
 // -------------------------------------------------------------
-extern const char *VHDL_OP_EQUAL;
-extern const char *VHDL_OP_NOT_EQUAL;
-extern const char *VHDL_OP_AND;
-extern const char *VHDL_OP_OR;
+extern const char * const VHDL_OP_EQUAL;
+extern const char * const VHDL_OP_NOT_EQUAL;
+extern const char * const VHDL_OP_AND;
+extern const char * const VHDL_OP_OR;
 
 // -------------------------------------------------------------
 // C type name constants
 // -------------------------------------------------------------
-extern const char *C_TYPE_INT;
-extern const char *C_TYPE_FLOAT;
-extern const char *C_TYPE_DOUBLE;
-extern const char *C_TYPE_CHAR;
+extern const char * const C_TYPE_INT;
+extern const char * const C_TYPE_FLOAT;
+extern const char * const C_TYPE_DOUBLE;
+extern const char * const C_TYPE_CHAR;
 
-// -------------------------------------------------------------
-// Indentation constants
-// -------------------------------------------------------------
-extern const char *INDENT_LEVEL_0;
-extern const char *INDENT_LEVEL_1;
-extern const char *INDENT_LEVEL_2;
-extern const char *INDENT_LEVEL_3;
-extern const char *INDENT_LEVEL_4;
+// VHDL type mapping strings — one per C primitive type.
+// int and float currently share the same bit representation;
+// float becomes ieee.float_pkg.float32 when IEEE 754 support is added.
+extern const char * const VHDL_TYPE_INT;
+extern const char * const VHDL_TYPE_FLOAT;
+extern const char * const VHDL_TYPE_DOUBLE;
+extern const char * const VHDL_TYPE_CHAR;
+extern const char * const VHDL_TYPE_DEFAULT;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CODEGEN_VHDL_CONSTANTS_H
