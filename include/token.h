@@ -1,15 +1,22 @@
 #ifndef TOKEN_H
 #define TOKEN_H
-#include <string.h>
-#include <ctype.h>
+
+/**
+ * @file token.h
+ * @brief Lexer token types, Token structure, ParserContext, and tokenizer interface.
+ */
+
 #include <stdio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Token types
 typedef enum {
     TOKEN_IDENTIFIER,
     TOKEN_KEYWORD,
     TOKEN_NUMBER,
-    TOKEN_STRING,
     TOKEN_OPERATOR,
     TOKEN_SEMICOLON,
     TOKEN_PARENTHESIS_OPEN,
@@ -22,26 +29,37 @@ typedef enum {
     TOKEN_EOF
 } TokenType;
 
+// Token value buffer size
+#define TOKEN_VALUE_SIZE 256
+
 // Token structure
 typedef struct {
     TokenType type;
-    char value[256];
-    int line; // Add this field
+    char value[TOKEN_VALUE_SIZE];
+    int line;
 } Token;
 
-// Current token (shared parsing state - to be moved into ParserContext later)
-extern Token current_token;
+/**
+ * @brief Parser context — encapsulates all mutable parsing state.
+ *
+ * Eliminates global mutable state, making the parser reentrant and testable.
+ * Create one per parse invocation and pass it to all parser functions.
+ */
+typedef struct {
+    Token current_token;   /**< Most recently read token. */
+    int current_line;      /**< Current source line number (1-based). */
+    FILE *input;           /**< Source file being parsed. */
+} ParserContext;
 
-// Keyword check
-int is_keyword(const char *str);
+/**
+ * @brief Initialize a ParserContext for parsing.
+ * @param ctx    Context to initialize.
+ * @param input  Source file handle.
+ */
+void parser_context_init(ParserContext *ctx, FILE *input);
 
-// Tokenizer function
-Token get_next_token(FILE* input);
-
-void advance(FILE *input);
-int match(TokenType type);
-int consume(FILE *input, TokenType type);
-
-extern int current_line;
+#ifdef __cplusplus
+}
+#endif
 
 #endif // TOKEN_H
