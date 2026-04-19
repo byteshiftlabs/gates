@@ -1,5 +1,38 @@
 #include "utils.h"
 
+// Buffer-safe string append: appends src to dst without overflowing dst_size
+void safe_append(char *dst, size_t dst_size, const char *src)
+{
+    size_t used = strlen(dst);
+    if (used >= dst_size - 1) {
+        return;
+    }
+    size_t available_space = dst_size - 1 - used;
+    size_t copy_length = strlen(src);
+    if (copy_length > available_space) {
+        copy_length = available_space;
+    }
+    memcpy(dst + used, src, copy_length);
+    dst[used + copy_length] = '\0';
+}
+
+// Buffer-safe string copy: copies at most limit chars from src into dst
+void safe_copy(char *dst, size_t dst_size, const char *src, size_t limit)
+{
+    if (!dst_size) {
+        return;
+    }
+    size_t source_length = strlen(src);
+    if (source_length > limit) {
+        source_length = limit;
+    }
+    if (source_length >= dst_size) {
+        source_length = dst_size - 1;
+    }
+    memcpy(dst, src, source_length);
+    dst[source_length] = '\0';
+}
+
 // Helper function to get operator precedence
 int get_precedence(const char *op)
 {

@@ -23,6 +23,7 @@ set(COMPI_ALL_SRC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_struct.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_function.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_statement.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_control_flow.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_main.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_constants.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl_helpers.c
