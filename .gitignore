@@ -28,3 +28,14 @@
 Thumbs.db
 
 # Test
+*.gcno
+*.gcda
+*.gcov
+coverage/
+
+# CMake generated
+compile_commands.json
+*.d
+
+# Clangd
+.cache/

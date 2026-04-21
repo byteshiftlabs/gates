@@ -1,0 +1,18 @@
+# Cppcheck suppressions for compi
+# These are intentional API functions or acceptable patterns
+
+# error_handler.c: Public API functions - not all used in main codebase
+# but available for users, tests, and future use
+unusedFunction:*error_handler.c
+
+# token.c: lookahead_char is initialized to 0 per project convention
+# (initialize at declaration) but always assigned via fgetc before read
+unreadVariable:*token.c
+
+# System includes are resolved by the compiler, not cppcheck
+missingIncludeSystem
+
+# Symbol table accessors/resetters are used from C++ test files (not scanned
+# by cppcheck) and exist as public API for consumers
+unusedFunction:*symbol_arrays.c
+unusedFunction:*symbol_structs.c
