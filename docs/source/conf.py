@@ -7,8 +7,10 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'compi'
-copyright = '2025, cmelnu'
+copyright = '2025-2026, cmelnu'
 author = 'cmelnu'
+version = '0.1'
+release = '0.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

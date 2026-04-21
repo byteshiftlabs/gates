@@ -24,10 +24,11 @@ Location
 The parser is split across multiple source files:
 
 - Main parser: ``src/parser/parse.c`` / ``include/parse.h``
-- Expressions: ``src/parser/parse_expression.c`` / ``include/parse_expression.h``
-- Statements: ``src/parser/parse_statement.c`` / ``include/parse_statement.h``
-- Functions: ``src/parser/parse_function.c`` / ``include/parse_function.h``
-- Structs: ``src/parser/parse_struct.c`` / ``include/parse_struct.h``
+- Expressions: ``src/parser/parse_expression.c`` / ``src/parser/parse_expression.h``
+- Statements: ``src/parser/parse_statement.c`` / ``src/parser/parse_statement.h``
+- Functions: ``src/parser/parse_function.c`` / ``src/parser/parse_function.h``
+- Structs: ``src/parser/parse_struct.c`` / ``src/parser/parse_struct.h``
+- Control flow: ``src/parser/parse_control_flow.c`` / ``src/parser/parse_control_flow.h``
 - Utilities: ``src/core/utils.c`` / ``include/utils.h``
 
 Parser Architecture
@@ -61,7 +62,7 @@ The parser follows a **top-down recursive descent** design:
 * **One function per grammar rule**: Each parsing function corresponds to a syntactic category
 * **Mutual recursion**: Statements can contain expressions; expressions can contain parenthesized expressions
 * **Lookahead**: Uses ``match()`` to check current token without consuming
-* **Error recovery**: Most errors result in ``exit(EXIT_FAILURE)`` (minimal recovery)
+* **Error recovery**: Errors are reported via ``log_error()`` and functions return ``NULL`` (or ``return`` for void functions). The ``has_errors()`` check prevents cascading failures in parsing loops.
 * **Symbol tracking**: Registers arrays and structs during parsing for later validation
 
 Grammar Overview
@@ -108,33 +109,36 @@ The entry point for parsing. Iterates over top-level declarations:
 
    ASTNode* parse_program(FILE *input)
    {
+       ParserContext ctx;
+       parser_context_init(&ctx, input);
+
        ASTNode *program_node = create_node(NODE_PROGRAM);
-       
-       advance(input);  // Prime the tokenizer with first token
-       
-       while (!match(TOKEN_EOF)) {
-           if (match(TOKEN_KEYWORD)) {
-               if (strcmp(current_token.value, "struct") == 0) {
-                   parse_struct_declaration(input, program_node);
+
+       advance(&ctx);  // Prime the tokenizer with first token
+
+       while (!match(&ctx, TOKEN_EOF) && !has_errors()) {
+           if (match(&ctx, TOKEN_KEYWORD)) {
+               if (strcmp(ctx.current_token.value, "struct") == 0) {
+                   parse_struct_declaration(&ctx, program_node);
                    continue;
                }
-               
+
                // Primitive type function declaration
-               Token return_type = current_token;
-               advance(input);
-               parse_function_declaration(input, return_type, program_node);
+               Token return_type = ctx.current_token;
+               advance(&ctx);
+               parse_function_declaration(&ctx, return_type, program_node);
            } else {
-               advance(input);  // Skip unknown tokens
+               advance(&ctx);  // Skip unknown tokens
            }
        }
-       
+
        return program_node;
    }
 
 **Process:**
 
 1. Create root ``NODE_PROGRAM`` node
-2. Prime tokenizer by calling ``advance(input)``
+2. Prime tokenizer by calling ``advance(ctx)``
 3. Loop until ``TOKEN_EOF``
 4. Dispatch to struct or function parsing based on keyword
 5. Add parsed declarations as children of program node
@@ -152,21 +156,21 @@ Handles struct definitions and functions returning structs:
 
 .. code-block:: c
 
-   static ASTNode* parse_struct_declaration(FILE *input, ASTNode *program_node)
+   static ASTNode* parse_struct_declaration(ParserContext *ctx, ASTNode *program_node)
    {
-       advance(input);  // consume 'struct'
+       advance(ctx);  // consume 'struct'
        
-       if (!match(TOKEN_IDENTIFIER)) {
-           printf("Warning: 'struct' without name at line %d\n", current_token.line);
+       if (!match(ctx, TOKEN_IDENTIFIER)) {
+           printf("Warning: 'struct' without name at line %d\n", ctx->current_token.line);
            return NULL;
        }
        
        Token struct_name_token = current_token;
-       advance(input);
+       advance(ctx);
        
        // Struct definition: struct Name { ... };
-       if (match(TOKEN_BRACE_OPEN)) {
-           ASTNode *struct_node = parse_struct(input, struct_name_token);
+       if (match(ctx, TOKEN_BRACE_OPEN)) {
+           ASTNode *struct_node = parse_struct(ctx, struct_name_token);
            if (struct_node) {
                add_child(program_node, struct_node);
            }
@@ -174,12 +178,12 @@ Handles struct definitions and functions returning structs:
        }
        
        // Function returning struct: struct Name funcname(...) { ... }
-       if (match(TOKEN_IDENTIFIER)) {
+       if (match(ctx, TOKEN_IDENTIFIER)) {
            Token function_name = current_token;
-           advance(input);
+           advance(ctx);
            
-           if (match(TOKEN_PARENTHESIS_OPEN)) {
-               ASTNode *function_node = parse_function(input, struct_name_token, function_name);
+           if (match(ctx, TOKEN_PARENTHESIS_OPEN)) {
+               ASTNode *function_node = parse_function(ctx, struct_name_token, function_name);
                if (function_node) {
                    add_child(program_node, function_node);
                }
@@ -202,26 +206,26 @@ Parses functions with primitive return types:
 
 .. code-block:: c
 
-   static ASTNode* parse_function_declaration(FILE *input, Token return_type, ASTNode *program_node)
+   static ASTNode* parse_function_declaration(ParserContext *ctx, Token return_type, ASTNode *program_node)
    {
-       if (!match(TOKEN_IDENTIFIER)) {
-           printf("Warning: Expected identifier after type at line %d\n", current_token.line);
-           advance(input);
+       if (!match(ctx, TOKEN_IDENTIFIER)) {
+           printf("Warning: Expected identifier after type at line %d\n", ctx->current_token.line);
+           advance(ctx);
            return NULL;
        }
        
        Token function_name = current_token;
-       advance(input);
+       advance(ctx);
        
-       if (match(TOKEN_PARENTHESIS_OPEN)) {
-           ASTNode *function_node = parse_function(input, return_type, function_name);
+       if (match(ctx, TOKEN_PARENTHESIS_OPEN)) {
+           ASTNode *function_node = parse_function(ctx, return_type, function_name);
            if (function_node) {
                add_child(program_node, function_node);
            }
            return function_node;
        } else {
            printf("Warning: Global variable declarations not yet implemented\n");
-           skip_to_semicolon(input);
+           skip_to_semicolon(ctx);
            return NULL;
        }
    }
@@ -239,9 +243,9 @@ Parses struct definitions with field declarations:
 
 .. code-block:: c
 
-   ASTNode* parse_struct(FILE *input, Token struct_name_token)
+   ASTNode* parse_struct(ParserContext *ctx, Token struct_name_token)
    {
-       if (!consume(input, TOKEN_BRACE_OPEN)) {
+       if (!consume(ctx, TOKEN_BRACE_OPEN)) {
            printf("Error: Expected '{' after struct name\n");
            return NULL;
        }
@@ -253,19 +257,19 @@ Parses struct definitions with field declarations:
        register_struct_in_table(struct_index, struct_name_token);
        
        // Parse all fields
-       while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
-           ASTNode *field_node = parse_struct_field(input, struct_index);
+       while (!match(ctx, TOKEN_BRACE_CLOSE) && !match(ctx, TOKEN_EOF)) {
+           ASTNode *field_node = parse_struct_field(ctx, struct_index);
            if (field_node) {
                add_child(struct_node, field_node);
            } else {
-               advance(input);  // Skip unknown tokens
+               advance(ctx);  // Skip unknown tokens
            }
        }
        
-       if (!consume(input, TOKEN_BRACE_CLOSE)) {
+       if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
            printf("Error: Expected '}' after struct body\n");
        }
-       if (!consume(input, TOKEN_SEMICOLON)) {
+       if (!consume(ctx, TOKEN_SEMICOLON)) {
            printf("Error: Expected ';' after struct declaration\n");
        }
        
@@ -294,22 +298,22 @@ Parses a single struct field declaration:
 
 .. code-block:: c
 
-   static ASTNode* parse_struct_field(FILE *input, int struct_index)
+   static ASTNode* parse_struct_field(ParserContext *ctx, int struct_index)
    {
-       if (!match(TOKEN_KEYWORD)) {
+       if (!match(ctx, TOKEN_KEYWORD)) {
            return NULL;
        }
        
        Token field_type = current_token;
-       advance(input);
+       advance(ctx);
        
-       if (!match(TOKEN_IDENTIFIER)) {
+       if (!match(ctx, TOKEN_IDENTIFIER)) {
            printf("Error: Expected field name in struct\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        Token field_name = current_token;
-       advance(input);
+       advance(ctx);
        
        ASTNode *field_node = create_node(NODE_VAR_DECL);
        field_node->token = field_type;
@@ -317,9 +321,9 @@ Parses a single struct field declaration:
        
        register_field_in_struct(struct_index, field_type, field_name);
        
-       if (!consume(input, TOKEN_SEMICOLON)) {
+       if (!consume(ctx, TOKEN_SEMICOLON)) {
            printf("Error: Expected ';' after struct field\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        return field_node;
@@ -423,7 +427,7 @@ Entry point for parsing function declarations:
 
 .. code-block:: c
 
-   ASTNode* parse_function(FILE *input, Token return_type, Token function_name)
+   ASTNode* parse_function(ParserContext *ctx, Token return_type, Token function_name)
    {
        ASTNode *function_node = NULL;
        
@@ -436,10 +440,10 @@ Entry point for parsing function declarations:
        g_array_count = 0;
        
        // Parse function parameters
-       parse_function_parameters(input, function_node);
+       parse_function_parameters(ctx, function_node);
        
        // Parse function body
-       parse_function_body(input, function_node);
+       parse_function_body(ctx, function_node);
        
        return function_node;
    }
@@ -462,20 +466,20 @@ Parses the parameter list between parentheses:
 
 .. code-block:: c
 
-   static void parse_function_parameters(FILE *input, ASTNode *function_node)
+   static void parse_function_parameters(ParserContext *ctx, ASTNode *function_node)
    {
        Token parameter_type = {0};
        ASTNode *parameter_node = NULL;
        
-       if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_OPEN)) {
            printf("Error: Expected '(' after function name\n");
            free_node(function_node);
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
-       while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF)) {
-           if (match(TOKEN_KEYWORD)) {
-               parameter_node = parse_single_parameter(input, &parameter_type);
+       while (!match(ctx, TOKEN_PARENTHESIS_CLOSE) && !match(ctx, TOKEN_EOF)) {
+           if (match(ctx, TOKEN_KEYWORD)) {
+               parameter_node = parse_single_parameter(ctx, &parameter_type);
                if (!parameter_node) {
                    break;
                }
@@ -483,18 +487,18 @@ Parses the parameter list between parentheses:
                add_child(function_node, parameter_node);
                
                // Handle comma between parameters
-               if (match(TOKEN_COMMA)) {
-                   advance(input);
+               if (match(ctx, TOKEN_COMMA)) {
+                   advance(ctx);
                }
            } else {
-               advance(input);
+               advance(ctx);
            }
        }
        
-       if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
            printf("Error: Expected ')' after parameter list\n");
            free_node(function_node);
-           exit(EXIT_FAILURE);
+           return NULL;
        }
    }
 
@@ -517,33 +521,33 @@ Parses one parameter declaration:
 
 .. code-block:: c
 
-   static ASTNode* parse_single_parameter(FILE *input, Token *parameter_type)
+   static ASTNode* parse_single_parameter(ParserContext *ctx, Token *parameter_type)
    {
        Token parameter_name = {0};
        ASTNode *parameter_node = NULL;
        
        // Handle struct types
-       if (strcmp(current_token.value, "struct") == 0) {
-           advance(input);
-           if (!match(TOKEN_IDENTIFIER)) {
+       if (strcmp(ctx->current_token.value, "struct") == 0) {
+           advance(ctx);
+           if (!match(ctx, TOKEN_IDENTIFIER)) {
                printf("Error: Expected struct name in parameter list\n");
                return NULL;
            }
            *parameter_type = current_token;
-           advance(input);
+           advance(ctx);
        } else {
            *parameter_type = current_token;
-           advance(input);
+           advance(ctx);
        }
        
        // Get parameter name
-       if (!match(TOKEN_IDENTIFIER)) {
+       if (!match(ctx, TOKEN_IDENTIFIER)) {
            printf("Error: Expected parameter name\n");
            return NULL;
        }
        
        parameter_name = current_token;
-       advance(input);
+       advance(ctx);
        
        // Create parameter node
        parameter_node = create_node(NODE_VAR_DECL);
@@ -565,26 +569,26 @@ Parses the function body between braces:
 
 .. code-block:: c
 
-   static void parse_function_body(FILE *input, ASTNode *function_node)
+   static void parse_function_body(ParserContext *ctx, ASTNode *function_node)
    {
        int brace_depth = 1;  // Start at 1 (opening brace already consumed)
        ASTNode *statement_node = NULL;
        
-       if (!consume(input, TOKEN_BRACE_OPEN)) {
+       if (!consume(ctx, TOKEN_BRACE_OPEN)) {
            printf("Error: Expected '{' to start function body\n");
            free_node(function_node);
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
-       while (brace_depth > 0 && !match(TOKEN_EOF)) {
-           if (match(TOKEN_BRACE_OPEN)) {
+       while (brace_depth > 0 && !match(ctx, TOKEN_EOF)) {
+           if (match(ctx, TOKEN_BRACE_OPEN)) {
                brace_depth++;
-               advance(input);
-           } else if (match(TOKEN_BRACE_CLOSE)) {
+               advance(ctx);
+           } else if (match(ctx, TOKEN_BRACE_CLOSE)) {
                brace_depth--;
-               advance(input);
+               advance(ctx);
            } else {
-               statement_node = parse_statement(input);
+               statement_node = parse_statement(ctx);
                if (statement_node) {
                    add_child(function_node, statement_node);
                }
@@ -644,9 +648,9 @@ Top-level entry point for expressions:
 
 .. code-block:: c
 
-   ASTNode* parse_expression(FILE *input)
+   ASTNode* parse_expression(ParserContext *ctx)
    { 
-       return parse_expression_prec(input, TOP_LEVEL_EXPR_MIN_PRECEDENCE);
+       return parse_expression_prec(ctx, TOP_LEVEL_EXPR_MIN_PRECEDENCE);
    }
 
 Delegates to ``parse_expression_prec()`` with minimum precedence of ``-2`` (includes all operators down to logical OR).
@@ -658,7 +662,7 @@ Core expression parser using **precedence climbing**:
 
 .. code-block:: c
 
-   ASTNode* parse_expression_prec(FILE *input, int min_prec)
+   ASTNode* parse_expression_prec(ParserContext *ctx, int min_prec)
    {
        ASTNode *left_operand = NULL;
        ASTNode *right_operand = NULL;
@@ -666,24 +670,24 @@ Core expression parser using **precedence climbing**:
        const char *operator = NULL;
        int operator_precedence = 0;
        
-       left_operand = parse_primary(input);
+       left_operand = parse_primary(ctx);
        if (!left_operand) {
            return NULL;
        }
        
-       while (match(TOKEN_OPERATOR)) {
-           operator = current_token.value;
+       while (match(ctx, TOKEN_OPERATOR)) {
+           operator = ctx->current_token.value;
            operator_precedence = get_precedence(operator);
            
            if (operator_precedence < min_prec) {
                break;  // Operator has lower precedence than minimum
            }
            
-           advance(input);
-           right_operand = parse_expression_prec(input, operator_precedence + 1);
+           advance(ctx);
+           right_operand = parse_expression_prec(ctx, operator_precedence + 1);
            if (!right_operand) {
                printf("Error: Expected right operand after operator '%s'\n", operator);
-               exit(EXIT_FAILURE);
+               return NULL;
            }
            
            binary_expr = create_node(NODE_BINARY_EXPR);
@@ -727,13 +731,13 @@ Core expression parser using **precedence climbing**:
 
 .. code-block:: text
 
-   parse_expression_prec(input, -2)
+   parse_expression_prec(ctx, -2)
      left = parse_primary() → "3"
      operator = "+", precedence = 6
-     right = parse_expression_prec(input, 7)
+     right = parse_expression_prec(ctx, 7)
        left = parse_primary() → "4"
        operator = "*", precedence = 7
-       right = parse_expression_prec(input, 8)
+       right = parse_expression_prec(ctx, 8)
          left = parse_primary() → "5"
          no more operators
          return "5"
@@ -747,36 +751,36 @@ Parses atomic expressions and unary operators:
 
 .. code-block:: c
 
-   ASTNode* parse_primary(FILE *input)
+   ASTNode* parse_primary(ParserContext *ctx)
    {
        // Logical NOT operator
-       if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "!") == 0) {
-           return parse_logical_not(input);
+       if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "!") == 0) {
+           return parse_logical_not(ctx);
        }
        
        // Bitwise NOT operator
-       if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "~") == 0) {
-           return parse_bitwise_not(input);
+       if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "~") == 0) {
+           return parse_bitwise_not(ctx);
        }
        
        // Unary minus operator
-       if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "-") == 0) {
-           return parse_unary_minus(input);
+       if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "-") == 0) {
+           return parse_unary_minus(ctx);
        }
        
        // Parenthesized expression
-       if (match(TOKEN_PARENTHESIS_OPEN)) {
-           return parse_parenthesized_expr(input);
+       if (match(ctx, TOKEN_PARENTHESIS_OPEN)) {
+           return parse_parenthesized_expr(ctx);
        }
        
        // Identifier (with optional field access and array indexing)
-       if (match(TOKEN_IDENTIFIER)) {
-           return parse_identifier(input);
+       if (match(ctx, TOKEN_IDENTIFIER)) {
+           return parse_identifier(ctx);
        }
        
        // Number literal
-       if (match(TOKEN_NUMBER)) {
-           return parse_number(input);
+       if (match(ctx, TOKEN_NUMBER)) {
+           return parse_number(ctx);
        }
        
        return NULL;
@@ -800,10 +804,10 @@ Unary Operators
 
 .. code-block:: c
 
-   static ASTNode* parse_logical_not(FILE *input)
+   static ASTNode* parse_logical_not(ParserContext *ctx)
    {
-       advance(input);
-       ASTNode *operand = parse_primary(input);
+       advance(ctx);
+       ASTNode *operand = parse_primary(ctx);
        if (!operand) return NULL;
        
        ASTNode *not_node = create_node(NODE_BINARY_OP);
@@ -816,10 +820,10 @@ Unary Operators
 
 .. code-block:: c
 
-   static ASTNode* parse_bitwise_not(FILE *input)
+   static ASTNode* parse_bitwise_not(ParserContext *ctx)
    {
-       advance(input);
-       ASTNode *operand = parse_primary(input);
+       advance(ctx);
+       ASTNode *operand = parse_primary(ctx);
        if (!operand) return NULL;
        
        ASTNode *not_node = create_node(NODE_BINARY_OP);
@@ -832,10 +836,10 @@ Unary Operators
 
 .. code-block:: c
 
-   static ASTNode* parse_unary_minus(FILE *input)
+   static ASTNode* parse_unary_minus(ParserContext *ctx)
    {
-       advance(input);
-       ASTNode *operand = parse_primary(input);
+       advance(ctx);
+       ASTNode *operand = parse_primary(ctx);
        if (!operand) return NULL;
        
        // Optimization: Fold into literal if operand is NODE_EXPRESSION
@@ -865,14 +869,14 @@ Parenthesized Expressions
 
 .. code-block:: c
 
-   static ASTNode* parse_parenthesized_expr(FILE *input)
+   static ASTNode* parse_parenthesized_expr(ParserContext *ctx)
    {
-       advance(input);  // consume '('
-       ASTNode *expr_node = parse_expression_prec(input, PARENTHESIZED_EXPR_MIN_PRECEDENCE);
+       advance(ctx);  // consume '('
+       ASTNode *expr_node = parse_expression_prec(ctx, PARENTHESIZED_EXPR_MIN_PRECEDENCE);
        
-       if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
            printf("Error: Expected ')' after expression\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        return expr_node;
@@ -887,21 +891,21 @@ Handles identifiers with optional struct field access and array indexing:
 
 .. code-block:: c
 
-   static ASTNode* parse_identifier(FILE *input)
+   static ASTNode* parse_identifier(ParserContext *ctx)
    {
        char identifier_name[128] = {0};
        char index_expression[512] = {0};
        char full_expression[643] = {0};
        
-       strcpy(identifier_name, current_token.value);
-       advance(input);
+       strcpy(identifier_name, ctx->current_token.value);
+       advance(ctx);
        
        // Handle field access (e.g., struct.field.subfield)
-       parse_field_access(input, identifier_name, sizeof(identifier_name));
+       parse_field_access(ctx, identifier_name, sizeof(identifier_name));
        
        // Handle array indexing
-       if (match(TOKEN_BRACKET_OPEN)) {
-           parse_array_index(input, index_expression, sizeof(index_expression));
+       if (match(ctx, TOKEN_BRACKET_OPEN)) {
+           parse_array_index(ctx, index_expression, sizeof(index_expression));
            
            snprintf(full_expression, sizeof(full_expression), 
                     "%s[%s]", identifier_name, index_expression);
@@ -931,19 +935,19 @@ Field Access Parsing
 
 .. code-block:: c
 
-   static void parse_field_access(FILE *input, char *identifier_buffer, size_t buffer_size)
+   static void parse_field_access(ParserContext *ctx, char *identifier_buffer, size_t buffer_size)
    {
-       while (match(TOKEN_OPERATOR) && strcmp(current_token.value, ".") == 0) {
-           advance(input);
+       while (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, ".") == 0) {
+           advance(ctx);
            
-           if (!match(TOKEN_IDENTIFIER)) {
+           if (!match(ctx, TOKEN_IDENTIFIER)) {
                printf("Error: Expected field name after '.'\n");
-               exit(EXIT_FAILURE);
+               return NULL;
            }
            
            safe_append(identifier_buffer, buffer_size, "__");
-           safe_append(identifier_buffer, buffer_size, current_token.value);
-           advance(input);
+           safe_append(identifier_buffer, buffer_size, ctx->current_token.value);
+           advance(ctx);
        }
    }
 
@@ -954,42 +958,42 @@ Array Index Parsing
 
 .. code-block:: c
 
-   static void parse_array_index(FILE *input, char *index_buffer, size_t buffer_size)
+   static void parse_array_index(ParserContext *ctx, char *index_buffer, size_t buffer_size)
    {
        int parenthesis_depth = 0;
        
-       advance(input);  // consume '['
+       advance(ctx);  // consume '['
        
-       while (!match(TOKEN_EOF)) {
-           if (match(TOKEN_BRACKET_CLOSE) && parenthesis_depth == 0) {
+       while (!match(ctx, TOKEN_EOF)) {
+           if (match(ctx, TOKEN_BRACKET_CLOSE) && parenthesis_depth == 0) {
                break;
            }
            
-           if (match(TOKEN_PARENTHESIS_OPEN)) {
+           if (match(ctx, TOKEN_PARENTHESIS_OPEN)) {
                safe_append(index_buffer, buffer_size, "(");
-               advance(input);
+               advance(ctx);
                parenthesis_depth++;
                continue;
            }
            
-           if (match(TOKEN_PARENTHESIS_CLOSE)) {
+           if (match(ctx, TOKEN_PARENTHESIS_CLOSE)) {
                safe_append(index_buffer, buffer_size, ")");
-               advance(input);
+               advance(ctx);
                if (parenthesis_depth > 0) {
                    parenthesis_depth--;
                }
                continue;
            }
            
-           if (current_token.value) {
-               safe_append(index_buffer, buffer_size, current_token.value);
+           if (ctx->current_token.value) {
+               safe_append(index_buffer, buffer_size, ctx->current_token.value);
            }
-           advance(input);
+           advance(ctx);
        }
        
-       if (!consume(input, TOKEN_BRACKET_CLOSE)) {
+       if (!consume(ctx, TOKEN_BRACKET_CLOSE)) {
            printf("Error: Expected ']' after array index\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
    }
 
@@ -1014,7 +1018,7 @@ Array Bounds Validation
        if (array_size > 0 && (index_value < 0 || index_value >= array_size)) {
            printf("Error: Array index %d out of bounds for '%s' with size %d\n",
                   index_value, identifier_name, array_size);
-           exit(EXIT_FAILURE);
+           return NULL;
        }
    }
 
@@ -1053,7 +1057,7 @@ Parses function call in expression context:
 
 .. code-block:: c
 
-   static ASTNode* parse_function_call(FILE *input, const char *function_name)
+   static ASTNode* parse_function_call(ParserContext *ctx, const char *function_name)
    {
        ASTNode *call_node = NULL;
        ASTNode *arg_node = NULL;
@@ -1061,20 +1065,20 @@ Parses function call in expression context:
        call_node = create_node(NODE_FUNC_CALL);
        call_node->value = strdup(function_name);
        
-       advance(input);  // consume '('
+       advance(ctx);  // consume '('
        
        // Parse zero or more comma-separated arguments
-       while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF))
+       while (!match(ctx, TOKEN_PARENTHESIS_CLOSE) && !match(ctx, TOKEN_EOF))
        {
-           arg_node = parse_expression_prec(input, PREC_TOP_LEVEL_MIN);
+           arg_node = parse_expression_prec(ctx, PREC_TOP_LEVEL_MIN);
            if (arg_node)
            {
                add_child(call_node, arg_node);
            }
            
-           if (match(TOKEN_COMMA))
+           if (match(ctx, TOKEN_COMMA))
            {
-               advance(input);
+               advance(ctx);
                continue;
            }
            else
@@ -1083,11 +1087,11 @@ Parses function call in expression context:
            }
        }
        
-       if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
+       if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE))
        {
            printf("Error (line %d): Expected ')' after function call arguments for '%s'\n",
-                  current_token.line, function_name);
-           exit(EXIT_FAILURE);
+                  ctx->current_token.line, function_name);
+           return NULL;
        }
        
        return call_node;
@@ -1107,16 +1111,16 @@ Function calls are detected in ``parse_identifier()`` when a ``TOKEN_PARENTHESIS
 
 .. code-block:: c
 
-   static ASTNode* parse_identifier(FILE *input)
+   static ASTNode* parse_identifier(ParserContext *ctx)
    {
        char identifier_name[128] = {0};
-       strcpy(identifier_name, current_token.value);
-       advance(input);
+       strcpy(identifier_name, ctx->current_token.value);
+       advance(ctx);
        
        // Check for function call: identifier(args)
-       if (match(TOKEN_PARENTHESIS_OPEN))
+       if (match(ctx, TOKEN_PARENTHESIS_OPEN))
        {
-           return parse_function_call(input, identifier_name);
+           return parse_function_call(ctx, identifier_name);
        }
        
        // ...handle field access and array indexing...
@@ -1129,7 +1133,7 @@ Parses function call as a statement (discards return value):
 
 .. code-block:: c
 
-   static ASTNode* parse_standalone_function_call(FILE *input, const char *function_name)
+   static ASTNode* parse_standalone_function_call(ParserContext *ctx, const char *function_name)
    {
        ASTNode *func_call_node = NULL;
        ASTNode *arg_node = NULL;
@@ -1137,20 +1141,20 @@ Parses function call as a statement (discards return value):
        func_call_node = create_node(NODE_FUNC_CALL);
        func_call_node->value = strdup(function_name);
        
-       advance(input);  // consume '('
+       advance(ctx);  // consume '('
        
        // Parse zero or more comma-separated arguments
-       while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF))
+       while (!match(ctx, TOKEN_PARENTHESIS_CLOSE) && !match(ctx, TOKEN_EOF))
        {
-           arg_node = parse_expression(input);
+           arg_node = parse_expression(ctx);
            if (arg_node)
            {
                add_child(func_call_node, arg_node);
            }
            
-           if (match(TOKEN_COMMA))
+           if (match(ctx, TOKEN_COMMA))
            {
-               advance(input);
+               advance(ctx);
                continue;
            }
            else
@@ -1159,16 +1163,16 @@ Parses function call as a statement (discards return value):
            }
        }
        
-       if (!consume(input, TOKEN_PARENTHESIS_CLOSE))
+       if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE))
        {
-           printf("Error (line %d): Expected ')' after function call arguments\n", current_token.line);
-           exit(EXIT_FAILURE);
+           printf("Error (line %d): Expected ')' after function call arguments\n", ctx->current_token.line);
+           return NULL;
        }
        
-       if (!consume(input, TOKEN_SEMICOLON))
+       if (!consume(ctx, TOKEN_SEMICOLON))
        {
-           printf("Error (line %d): Expected ';' after function call\n", current_token.line);
-           exit(EXIT_FAILURE);
+           printf("Error (line %d): Expected ';' after function call\n", ctx->current_token.line);
+           return NULL;
        }
        
        return func_call_node;
@@ -1283,20 +1287,20 @@ Main statement dispatcher:
 
 .. code-block:: c
 
-   ASTNode* parse_statement(FILE *input)
+   ASTNode* parse_statement(ParserContext *ctx)
    {
        ASTNode *stmt_node = create_node(NODE_STATEMENT);
        ASTNode *sub_statement = NULL;
        
        // Variable declaration
-       if (match(TOKEN_KEYWORD) && (strcmp(current_token.value, "int") == 0 ||
-                                     strcmp(current_token.value, "float") == 0 ||
-                                     strcmp(current_token.value, "char") == 0 ||
-                                     strcmp(current_token.value, "double") == 0 ||
-                                     strcmp(current_token.value, "struct") == 0)) {
+       if (match(ctx, TOKEN_KEYWORD) && (strcmp(ctx->current_token.value, "int") == 0 ||
+                                     strcmp(ctx->current_token.value, "float") == 0 ||
+                                     strcmp(ctx->current_token.value, "char") == 0 ||
+                                     strcmp(ctx->current_token.value, "double") == 0 ||
+                                     strcmp(ctx->current_token.value, "struct") == 0)) {
            Token type_token = current_token;
-           advance(input);
-           sub_statement = parse_variable_declaration(input, type_token);
+           advance(ctx);
+           sub_statement = parse_variable_declaration(ctx, type_token);
            if (sub_statement) {
                add_child(stmt_node, sub_statement);
            }
@@ -1304,8 +1308,8 @@ Main statement dispatcher:
        }
        
        // Assignment or expression statement
-       if (match(TOKEN_IDENTIFIER)) {
-           sub_statement = parse_assignment_or_expression(input);
+       if (match(ctx, TOKEN_IDENTIFIER)) {
+           sub_statement = parse_assignment_or_expression(ctx);
            if (sub_statement) {
                add_child(stmt_node, sub_statement);
            }
@@ -1313,38 +1317,38 @@ Main statement dispatcher:
        }
        
        // Control flow statements
-       if (match(TOKEN_KEYWORD)) {
-           if (strcmp(current_token.value, "return") == 0) {
-               return parse_return_statement(input);
+       if (match(ctx, TOKEN_KEYWORD)) {
+           if (strcmp(ctx->current_token.value, "return") == 0) {
+               return parse_return_statement(ctx);
            }
-           if (strcmp(current_token.value, "if") == 0) {
-               sub_statement = parse_if_statement(input);
+           if (strcmp(ctx->current_token.value, "if") == 0) {
+               sub_statement = parse_if_statement(ctx);
                // ...
            }
-           if (strcmp(current_token.value, "while") == 0) {
-               sub_statement = parse_while_statement(input);
+           if (strcmp(ctx->current_token.value, "while") == 0) {
+               sub_statement = parse_while_statement(ctx);
                // ...
            }
-           if (strcmp(current_token.value, "for") == 0) {
-               sub_statement = parse_for_statement(input);
+           if (strcmp(ctx->current_token.value, "for") == 0) {
+               sub_statement = parse_for_statement(ctx);
                // ...
            }
-           if (strcmp(current_token.value, "break") == 0) {
-               sub_statement = parse_break_statement(input);
+           if (strcmp(ctx->current_token.value, "break") == 0) {
+               sub_statement = parse_break_statement(ctx);
                // ...
            }
-           if (strcmp(current_token.value, "continue") == 0) {
-               sub_statement = parse_continue_statement(input);
+           if (strcmp(ctx->current_token.value, "continue") == 0) {
+               sub_statement = parse_continue_statement(ctx);
                // ...
            }
        }
        
        // Unknown statement - skip to semicolon
-       while (!match(TOKEN_SEMICOLON) && !match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
-           advance(input);
+       while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_BRACE_CLOSE) && !match(ctx, TOKEN_EOF)) {
+           advance(ctx);
        }
-       if (match(TOKEN_SEMICOLON)) {
-           advance(input);
+       if (match(ctx, TOKEN_SEMICOLON)) {
+           advance(ctx);
        }
        
        return stmt_node;
@@ -1366,74 +1370,74 @@ Variable Declaration
 
 .. code-block:: c
 
-   static ASTNode* parse_variable_declaration(FILE *input, Token type_token)
+   static ASTNode* parse_variable_declaration(ParserContext *ctx, Token type_token)
    {
        // Handle struct types
        if (strcmp(type_token.value, "struct") == 0) {
-           if (!match(TOKEN_IDENTIFIER)) {
+           if (!match(ctx, TOKEN_IDENTIFIER)) {
                printf("Error: Expected struct name after 'struct'\n");
-               exit(EXIT_FAILURE);
+               return NULL;
            }
            type_token = current_token;
-           advance(input);
+           advance(ctx);
        }
        
        // Get variable name
-       if (!match(TOKEN_IDENTIFIER)) {
+       if (!match(ctx, TOKEN_IDENTIFIER)) {
            printf("Error: Expected variable name after type\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        Token name_token = current_token;
-       advance(input);
+       advance(ctx);
        
        ASTNode *var_decl_node = create_node(NODE_VAR_DECL);
        var_decl_node->token = type_token;
        var_decl_node->value = strdup(name_token.value);
        
        // Handle array declaration
-       if (match(TOKEN_BRACKET_OPEN)) {
-           advance(input);
+       if (match(ctx, TOKEN_BRACKET_OPEN)) {
+           advance(ctx);
            
-           if (!match(TOKEN_NUMBER)) {
+           if (!match(ctx, TOKEN_NUMBER)) {
                printf("Error: Expected array size after '['\n");
-               exit(EXIT_FAILURE);
+               return NULL;
            }
            
            char buf[1024];
-           snprintf(buf, sizeof(buf), "%s[%s]", name_token.value, current_token.value);
+           snprintf(buf, sizeof(buf), "%s[%s]", name_token.value, ctx->current_token.value);
            free(var_decl_node->value);
            var_decl_node->value = strdup(buf);
            
-           register_array(name_token.value, atoi(current_token.value));
-           advance(input);
+           register_array(name_token.value, atoi(ctx->current_token.value));
+           advance(ctx);
            
-           if (!consume(input, TOKEN_BRACKET_CLOSE)) {
+           if (!consume(ctx, TOKEN_BRACKET_CLOSE)) {
                printf("Error: Expected ']' after array size\n");
-               exit(EXIT_FAILURE);
+               return NULL;
            }
        }
        
        // Handle initialization
-       if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
-           advance(input);
+       if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "=") == 0) {
+           advance(ctx);
            
-           if (match(TOKEN_BRACE_OPEN)) {
+           if (match(ctx, TOKEN_BRACE_OPEN)) {
                // Array or struct initializer list
-               ASTNode *init_list = parse_initializer_list(input, is_array);
+               ASTNode *init_list = parse_initializer_list(ctx, is_array);
                add_child(var_decl_node, init_list);
            } else {
                // Single expression initializer
-               ASTNode *init_expr = parse_expression(input);
+               ASTNode *init_expr = parse_expression(ctx);
                if (init_expr) {
                    add_child(var_decl_node, init_expr);
                }
            }
        }
        
-       if (!consume(input, TOKEN_SEMICOLON)) {
+       if (!consume(ctx, TOKEN_SEMICOLON)) {
            printf("Error: Expected ';' after variable declaration\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        return var_decl_node;
@@ -1455,46 +1459,46 @@ Assignment Statement
 
 .. code-block:: c
 
-   static ASTNode* parse_assignment_or_expression(FILE *input)
+   static ASTNode* parse_assignment_or_expression(ParserContext *ctx)
    {
        Token lhs_token = current_token;
        char lhs_buf[1024] = {0};
        char idx_buf[512] = {0};
        char base_name[128] = {0};
        
-       advance(input);
+       advance(ctx);
        
        // Parse left-hand side (identifier with optional field access and array indexing)
-       parse_lhs_expression(input, lhs_token, lhs_buf, sizeof(lhs_buf),
+       parse_lhs_expression(ctx, lhs_token, lhs_buf, sizeof(lhs_buf),
                            idx_buf, sizeof(idx_buf), base_name, sizeof(base_name));
        
        ASTNode *lhs_expr = create_node(NODE_EXPRESSION);
        lhs_expr->value = strdup(lhs_buf);
        
        // Check for assignment operator
-       if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
-           advance(input);
+       if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "=") == 0) {
+           advance(ctx);
            ASTNode *assign_node = create_node(NODE_ASSIGNMENT);
            add_child(assign_node, lhs_expr);
            
-           ASTNode *rhs_node = parse_expression(input);
+           ASTNode *rhs_node = parse_expression(ctx);
            if (rhs_node) {
                add_child(assign_node, rhs_node);
            }
            
-           if (!consume(input, TOKEN_SEMICOLON)) {
+           if (!consume(ctx, TOKEN_SEMICOLON)) {
                printf("Error: Expected ';' after assignment\n");
-               exit(EXIT_FAILURE);
+               return NULL;
            }
            
            return assign_node;
        } else {
            // Not an assignment, skip to semicolon
-           while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
-               advance(input);
+           while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF)) {
+               advance(ctx);
            }
-           if (match(TOKEN_SEMICOLON)) {
-               advance(input);
+           if (match(ctx, TOKEN_SEMICOLON)) {
+               advance(ctx);
            }
            free_node(lhs_expr);
            return NULL;
@@ -1516,24 +1520,24 @@ If Statement
 
 .. code-block:: c
 
-   static ASTNode* parse_if_statement(FILE *input)
+   static ASTNode* parse_if_statement(ParserContext *ctx)
    {
-       advance(input);  // consume 'if'
+       advance(ctx);  // consume 'if'
        
-       if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_OPEN)) {
            printf("Error: Expected '(' after 'if'\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
-       ASTNode *cond_expr = parse_expression(input);
+       ASTNode *cond_expr = parse_expression(ctx);
        
-       if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
            printf("Error: Expected ')' after if condition\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
-       if (!consume(input, TOKEN_BRACE_OPEN)) {
+       if (!consume(ctx, TOKEN_BRACE_OPEN)) {
            printf("Error: Expected '{' after if condition\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        ASTNode *if_node = create_node(NODE_IF_STATEMENT);
@@ -1542,20 +1546,20 @@ If Statement
        }
        
        // Parse body statements
-       while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
-           ASTNode *inner_stmt = parse_statement(input);
+       while (!match(ctx, TOKEN_BRACE_CLOSE) && !match(ctx, TOKEN_EOF)) {
+           ASTNode *inner_stmt = parse_statement(ctx);
            if (inner_stmt) {
                add_child(if_node, inner_stmt);
            }
        }
        
-       if (!consume(input, TOKEN_BRACE_CLOSE)) {
+       if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
            printf("Error: Expected '}' after if block\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        // Parse optional else-if and else blocks
-       parse_else_blocks(input, if_node);
+       parse_else_blocks(ctx, if_node);
        
        return if_node;
    }
@@ -1579,24 +1583,24 @@ While Loop
 
 .. code-block:: c
 
-   static ASTNode* parse_while_statement(FILE *input)
+   static ASTNode* parse_while_statement(ParserContext *ctx)
    {
-       advance(input);  // consume 'while'
+       advance(ctx);  // consume 'while'
        
-       if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_OPEN)) {
            printf("Error: Expected '(' after 'while'\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
-       ASTNode *cond_expr = parse_expression(input);
+       ASTNode *cond_expr = parse_expression(ctx);
        
-       if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
            printf("Error: Expected ')' after while condition\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
-       if (!consume(input, TOKEN_BRACE_OPEN)) {
+       if (!consume(ctx, TOKEN_BRACE_OPEN)) {
            printf("Error: Expected '{' after while condition\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        ASTNode *while_node = create_node(NODE_WHILE_STATEMENT);
@@ -1605,17 +1609,17 @@ While Loop
        }
        
        s_loop_depth++;  // Track loop nesting for break/continue validation
-       while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
-           ASTNode *inner_stmt = parse_statement(input);
+       while (!match(ctx, TOKEN_BRACE_CLOSE) && !match(ctx, TOKEN_EOF)) {
+           ASTNode *inner_stmt = parse_statement(ctx);
            if (inner_stmt) {
                add_child(while_node, inner_stmt);
            }
        }
        s_loop_depth--;
        
-       if (!consume(input, TOKEN_BRACE_CLOSE)) {
+       if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
            printf("Error: Expected '}' after while block\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        return while_node;
@@ -1628,43 +1632,43 @@ For Loop
 
 .. code-block:: c
 
-   static ASTNode* parse_for_statement(FILE *input)
+   static ASTNode* parse_for_statement(ParserContext *ctx)
    {
-       advance(input);  // consume 'for'
+       advance(ctx);  // consume 'for'
        
-       if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_OPEN)) {
            printf("Error: Expected '(' after 'for'\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        // Parse initialization
-       ASTNode *init_node = parse_for_init(input);
+       ASTNode *init_node = parse_for_init(ctx);
        
-       if (match(TOKEN_SEMICOLON)) {
-           advance(input);
+       if (match(ctx, TOKEN_SEMICOLON)) {
+           advance(ctx);
        }
        
        // Parse condition
        ASTNode *cond_expr = NULL;
-       if (!match(TOKEN_SEMICOLON)) {
-           cond_expr = parse_expression(input);
+       if (!match(ctx, TOKEN_SEMICOLON)) {
+           cond_expr = parse_expression(ctx);
        }
        
-       if (!consume(input, TOKEN_SEMICOLON)) {
+       if (!consume(ctx, TOKEN_SEMICOLON)) {
            printf("Error: Expected ';' after for condition\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        // Parse increment
-       ASTNode *incr_expr = parse_for_increment(input);
+       ASTNode *incr_expr = parse_for_increment(ctx);
        
-       if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+       if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
            printf("Error: Expected ')' after for header\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
-       if (!consume(input, TOKEN_BRACE_OPEN)) {
+       if (!consume(ctx, TOKEN_BRACE_OPEN)) {
            printf("Error: Expected '{' after for header\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        // Build for node
@@ -1685,17 +1689,17 @@ For Loop
        
        // Parse body
        s_loop_depth++;
-       while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
-           ASTNode *inner = parse_statement(input);
+       while (!match(ctx, TOKEN_BRACE_CLOSE) && !match(ctx, TOKEN_EOF)) {
+           ASTNode *inner = parse_statement(ctx);
            if (inner) {
                add_child(for_node, inner);
            }
        }
        s_loop_depth--;
        
-       if (!consume(input, TOKEN_BRACE_CLOSE)) {
+       if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
            printf("Error: Expected '}' after for body\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        // Add increment as last child
@@ -1715,17 +1719,17 @@ The ``parse_for_init()`` helper handles two cases:
 
 .. code-block:: c
 
-   static ASTNode* parse_for_init(FILE *input)
+   static ASTNode* parse_for_init(ParserContext *ctx)
    {
-       if (match(TOKEN_SEMICOLON)) {
+       if (match(ctx, TOKEN_SEMICOLON)) {
            return NULL;  // Empty initialization
        }
        
        // Try parsing as variable declaration
-       if (match(TOKEN_KEYWORD) && (strcmp(current_token.value, "int") == 0 ||
-                                     strcmp(current_token.value, "float") == 0 ||
+       if (match(ctx, TOKEN_KEYWORD) && (strcmp(ctx->current_token.value, "int") == 0 ||
+                                     strcmp(ctx->current_token.value, "float") == 0 ||
                                      /* ... */)) {
-           ASTNode *init_stmt = parse_statement(input);
+           ASTNode *init_stmt = parse_statement(ctx);
            if (init_stmt && init_stmt->num_children > 0) {
                ASTNode *child0 = init_stmt->children[0];
                if (child0->type == NODE_VAR_DECL || child0->type == NODE_ASSIGNMENT) {
@@ -1735,24 +1739,24 @@ The ``parse_for_init()`` helper handles two cases:
        }
        
        // Try parsing as assignment
-       if (match(TOKEN_IDENTIFIER)) {
+       if (match(ctx, TOKEN_IDENTIFIER)) {
            Token temp_lhs = current_token;
-           advance(input);
-           if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
-               advance(input);
+           advance(ctx);
+           if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "=") == 0) {
+               advance(ctx);
                ASTNode *assign_tmp = create_node(NODE_ASSIGNMENT);
                ASTNode *lhs_expr_tmp = create_node(NODE_EXPRESSION);
                lhs_expr_tmp->value = strdup(temp_lhs.value);
                add_child(assign_tmp, lhs_expr_tmp);
                
-               ASTNode *rhs_expr = parse_expression(input);
+               ASTNode *rhs_expr = parse_expression(ctx);
                if (rhs_expr) {
                    add_child(assign_tmp, rhs_expr);
                }
                
-               if (!consume(input, TOKEN_SEMICOLON)) {
+               if (!consume(ctx, TOKEN_SEMICOLON)) {
                    printf("Error: Expected ';' after for-init assignment\n");
-                   exit(EXIT_FAILURE);
+                   return NULL;
                }
                return assign_tmp;
            }
@@ -1770,26 +1774,26 @@ The ``parse_for_increment()`` helper handles:
 
 .. code-block:: c
 
-   static ASTNode* parse_for_increment(FILE *input)
+   static ASTNode* parse_for_increment(ParserContext *ctx)
    {
-       if (match(TOKEN_PARENTHESIS_CLOSE)) {
+       if (match(ctx, TOKEN_PARENTHESIS_CLOSE)) {
            return NULL;  // Empty increment
        }
        
-       if (match(TOKEN_IDENTIFIER)) {
+       if (match(ctx, TOKEN_IDENTIFIER)) {
            Token inc_lhs = current_token;
-           advance(input);
+           advance(ctx);
            
            // Handle ++ and --
-           if (match(TOKEN_OPERATOR) && (strcmp(current_token.value, "++") == 0 ||
-                                          strcmp(current_token.value, "--") == 0)) {
+           if (match(ctx, TOKEN_OPERATOR) && (strcmp(ctx->current_token.value, "++") == 0 ||
+                                          strcmp(ctx->current_token.value, "--") == 0)) {
                ASTNode *incr_expr = create_node(NODE_ASSIGNMENT);
                ASTNode *lhs = create_node(NODE_EXPRESSION);
                lhs->value = strdup(inc_lhs.value);
                add_child(incr_expr, lhs);
                
                ASTNode *rhs = create_node(NODE_BINARY_EXPR);
-               rhs->value = strdup(strcmp(current_token.value, "++") == 0 ? "+" : "-");
+               rhs->value = strdup(strcmp(ctx->current_token.value, "++") == 0 ? "+" : "-");
                ASTNode *op_l = create_node(NODE_EXPRESSION);
                op_l->value = strdup(inc_lhs.value);
                ASTNode *op_r = create_node(NODE_EXPRESSION);
@@ -1797,19 +1801,19 @@ The ``parse_for_increment()`` helper handles:
                add_child(rhs, op_l);
                add_child(rhs, op_r);
                add_child(incr_expr, rhs);
-               advance(input);
+               advance(ctx);
                return incr_expr;
            }
            
            // Handle assignment
-           if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
-               advance(input);
+           if (match(ctx, TOKEN_OPERATOR) && strcmp(ctx->current_token.value, "=") == 0) {
+               advance(ctx);
                ASTNode *incr_expr = create_node(NODE_ASSIGNMENT);
                ASTNode *lhs = create_node(NODE_EXPRESSION);
                lhs->value = strdup(inc_lhs.value);
                add_child(incr_expr, lhs);
                
-               ASTNode *rhs = parse_expression(input);
+               ASTNode *rhs = parse_expression(ctx);
                if (rhs) {
                    add_child(incr_expr, rhs);
                }
@@ -1836,18 +1840,18 @@ Break and Continue
 
 .. code-block:: c
 
-   static ASTNode* parse_break_statement(FILE *input)
+   static ASTNode* parse_break_statement(ParserContext *ctx)
    {
        if (s_loop_depth <= 0) {
            printf("Error: 'break' not within a loop\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
-       advance(input);
+       advance(ctx);
        
-       if (!consume(input, TOKEN_SEMICOLON)) {
+       if (!consume(ctx, TOKEN_SEMICOLON)) {
            printf("Error: Expected ';' after 'break'\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        ASTNode *break_node = create_node(NODE_BREAK_STATEMENT);
@@ -1856,18 +1860,18 @@ Break and Continue
 
 .. code-block:: c
 
-   static ASTNode* parse_continue_statement(FILE *input)
+   static ASTNode* parse_continue_statement(ParserContext *ctx)
    {
        if (s_loop_depth <= 0) {
            printf("Error: 'continue' not within a loop\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
-       advance(input);
+       advance(ctx);
        
-       if (!consume(input, TOKEN_SEMICOLON)) {
+       if (!consume(ctx, TOKEN_SEMICOLON)) {
            printf("Error: Expected ';' after 'continue'\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        ASTNode *continue_node = create_node(NODE_CONTINUE_STATEMENT);
@@ -1881,20 +1885,20 @@ Return Statement
 
 .. code-block:: c
 
-   static ASTNode* parse_return_statement(FILE *input)
+   static ASTNode* parse_return_statement(ParserContext *ctx)
    {
        ASTNode *stmt_node = create_node(NODE_STATEMENT);
        stmt_node->token = current_token;  // Store 'return' keyword
-       advance(input);
+       advance(ctx);
        
-       ASTNode *return_expr = parse_expression(input);
+       ASTNode *return_expr = parse_expression(ctx);
        if (return_expr) {
            add_child(stmt_node, return_expr);
        }
        
-       if (!consume(input, TOKEN_SEMICOLON)) {
+       if (!consume(ctx, TOKEN_SEMICOLON)) {
            printf("Error: Expected ';' after return statement\n");
-           exit(EXIT_FAILURE);
+           return NULL;
        }
        
        return stmt_node;
@@ -1907,9 +1911,9 @@ Error Handling
 
 The parser uses a **fail-fast** approach:
 
-* Most errors call ``printf()`` followed by ``exit(EXIT_FAILURE)``
+* Most errors call ``printf()`` followed by ``return NULL (or return for void functions)``
 * No error recovery or synchronization
-* Provides line numbers from ``current_token.line``
+* Provides line numbers from ``ctx->current_token.line``
 * Some functions return ``NULL`` on error and let caller handle it
 
 **Example error messages:**
@@ -1931,8 +1935,8 @@ Checks if current token matches expected type without consuming:
 
 .. code-block:: c
 
-   int match(TokenType type) {
-       return current_token.type == type;
+   int match(const ParserContext *ctx, TokenType type) {
+       return ctx->current_token.type == type;
    }
 
 consume()
@@ -1942,9 +1946,9 @@ Checks if current token matches expected type, and if so, advances:
 
 .. code-block:: c
 
-   int consume(FILE *input, TokenType type) {
-       if (match(type)) {
-           advance(input);
+   int consume(ParserContext *ctx, TokenType type) {
+       if (match(ctx, type)) {
+           advance(ctx);
            return 1;
        }
        return 0;
@@ -1957,8 +1961,8 @@ Gets next token from lexer and updates ``current_token``:
 
 .. code-block:: c
 
-   void advance(FILE *input) {
-       current_token = get_next_token(input);
+   void advance(ParserContext *ctx) {
+       ctx->current_token = get_next_token(ctx);
    }
 
 safe_append()
@@ -2100,7 +2104,7 @@ The parser is a **modular recursive descent parser** with **precedence climbing*
 * Validates syntax with detailed error messages
 * Flattens field access and array indexing into strings
 * Tracks symbols for array bounds checking
-* Uses fail-fast error handling with ``exit(EXIT_FAILURE)``
+* Uses fail-fast error handling with ``return NULL (or return for void functions)``
 
 The design prioritizes **simplicity and clarity** over advanced features like error recovery or performance optimization. It provides a solid foundation for the compiler while being easy to understand and extend.
 

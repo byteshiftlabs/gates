@@ -64,7 +64,7 @@ The core AST node structure is defined in ``include/astnode.h``:
 Node Types
 ----------
 
-The ``NodeType`` enum defines 17 distinct node types:
+The ``NodeType`` enum defines 19 distinct node types:
 
 .. code-block:: c
 
@@ -86,7 +86,8 @@ The ``NodeType`` enum defines 17 distinct node types:
        NODE_WHILE_STATEMENT,      // While loop
        NODE_FOR_STATEMENT,        // For loop
        NODE_BREAK_STATEMENT,      // Break statement
-       NODE_CONTINUE_STATEMENT    // Continue statement
+       NODE_CONTINUE_STATEMENT,   // Continue statement
+       NODE_FUNC_CALL             // Function call
    } NodeType;
 
 **Usage notes:**
@@ -113,8 +114,8 @@ Creates and initializes a new AST node:
    ASTNode* create_node(NodeType type) {
        ASTNode *node = (ASTNode*)malloc(sizeof(ASTNode));
        if (!node) {
-           perror("Failed to allocate memory for AST node");
-           exit(EXIT_FAILURE);
+           log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to allocate memory for AST node");
+           return NULL;
        }
        
        node->type = type;
@@ -131,8 +132,8 @@ Creates and initializes a new AST node:
 
 * Allocates memory for the node structure
 * Initializes all fields to default values
-* Calls ``exit(EXIT_FAILURE)`` if allocation fails
-* Returns pointer to the new node
+* Returns ``NULL`` if allocation fails (reports via ``log_error``)
+* Returns pointer to the new node on success
 
 **Memory allocation:**
 
@@ -202,25 +203,32 @@ Adds a child node to a parent node, growing the children array if necessary:
 .. code-block:: c
 
    void add_child(ASTNode *parent, ASTNode *child) {
+       if (!parent || !child) {
+           log_error(ERROR_CATEGORY_GENERAL, 0,
+                     "add_child called with NULL %s", !parent ? "parent" : "child");
+           return;
+       }
+
        // Allocate initial children array if needed
        if (!parent->children) {
-           parent->capacity = 4;  // Start with space for 4 children
+           parent->capacity = INITIAL_CHILDREN_CAPACITY;
            parent->children = (ASTNode**)malloc(parent->capacity * sizeof(ASTNode*));
            if (!parent->children) {
-               perror("Failed to allocate memory for child nodes");
-               exit(EXIT_FAILURE);
+               log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to allocate memory for child nodes");
+               return;
            }
        }
        
        // Double capacity if array is full
        if (parent->num_children >= parent->capacity) {
-           parent->capacity *= 2;
-           parent->children = (ASTNode**)realloc(parent->children, 
-                                                 parent->capacity * sizeof(ASTNode*));
-           if (!parent->children) {
-               perror("Failed to reallocate memory for child nodes");
-               exit(EXIT_FAILURE);
+           parent->capacity *= CHILDREN_GROWTH_FACTOR;
+           ASTNode **new_children = (ASTNode**)realloc(parent->children, 
+                                                parent->capacity * sizeof(ASTNode*));
+           if (!new_children) {
+               log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to reallocate memory for child nodes");
+               return;
            }
+           parent->children = new_children;
        }
        
        // Add child and set parent pointer
@@ -233,7 +241,9 @@ Adds a child node to a parent node, growing the children array if necessary:
 * **Lazy initialization**: Allocates children array on first child (initial capacity = 4)
 * **Dynamic growth**: Doubles capacity when array is full (amortized O(1) insertion)
 * **Bidirectional links**: Sets child's ``parent`` pointer for bottom-up traversal
-* **Error handling**: Calls ``exit(EXIT_FAILURE)`` on allocation failure
+* **Null safety**: Checks for NULL ``parent`` or ``child`` parameters
+* **Error handling**: Reports errors via ``log_error()`` and returns early on allocation failure (no ``exit``)
+* **Safe realloc**: Uses temporary variable to preserve old allocation on failure
 
 **Capacity growth sequence:**
 
