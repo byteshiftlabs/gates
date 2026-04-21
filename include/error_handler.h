@@ -1,6 +1,14 @@
 #ifndef ERROR_HANDLER_H
 #define ERROR_HANDLER_H
 
+/**
+ * @file error_handler.h
+ * @brief Multi-level error diagnostics with colored output and source context.
+ */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Error severity levels
 typedef enum {
@@ -118,5 +126,9 @@ int has_errors(void);
  * @param enable 1 to enable colors, 0 to disable
  */
 void set_colored_output(int enable);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // ERROR_HANDLER_H

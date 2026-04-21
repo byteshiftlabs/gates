@@ -1,7 +1,16 @@
 #ifndef ASTNODE_H
 #define ASTNODE_H
 
+/**
+ * @file astnode.h
+ * @brief AST node types, structure, and management functions.
+ */
+
 #include "token.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // AST Node Types
 typedef enum {
@@ -39,9 +48,28 @@ typedef struct ASTNode {
 } ASTNode;
 
 
-// Missing function declarations for AST node management
+/**
+ * @brief Create a new AST node of the given type.
+ * @param type  The node type (e.g. NODE_PROGRAM, NODE_IF_STATEMENT).
+ * @return Pointer to the newly allocated node, or NULL on failure.
+ */
 ASTNode* create_node(NodeType type);
+
+/**
+ * @brief Recursively free an AST node and all its children.
+ * @param node  Root of the subtree to free (may be NULL).
+ */
 void free_node(ASTNode* node);
+
+/**
+ * @brief Append a child node to a parent's children array.
+ * @param parent  Parent node to add the child to.
+ * @param child   Child node to attach.
+ */
 void add_child(ASTNode* parent, ASTNode* child);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // ASTNODE_H

@@ -1,64 +1,70 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include "parse.h"
 #include "codegen_vhdl.h"
+#include "error_handler.h"
+#include "utils.h"
+
+// Minimum: program name + input file + output file
+#define MIN_ARGC 3
 
 
 int main(int argc, char *argv[])
 {
-
-    FILE *fin = NULL;
-    FILE *fout = NULL;
-    ASTNode *program = NULL;
-
-    // Check arguments
-    if (argc < 3) {
-        printf("Usage: %s <input.c> <output.vhdl>\n", argv[0]);
-        exit(EXIT_FAILURE);
+    if (argc < MIN_ARGC) {
+        log_error(ERROR_CATEGORY_GENERAL, 0,
+                  "Usage: %s <input.c> <output.vhdl>", argv[0]);
+        return EXIT_FAILURE;
     }
 
     // Open input file
-    fin = fopen(argv[1], "r");
+    FILE *fin = fopen(argv[1], "r");
     if (!fin) {
-        perror("Error opening input file");
-        exit(EXIT_FAILURE);
+        log_error(ERROR_CATEGORY_GENERAL, 0,
+                  "Error opening input file '%s': %s", argv[1], strerror(errno));
+        return EXIT_FAILURE;
     }
 
     // Open output file
-    fout = fopen(argv[2], "w");
+    FILE *fout = fopen(argv[2], "w");
     if (!fout) {
-        perror("Error opening output file");
+        log_error(ERROR_CATEGORY_GENERAL, 0,
+                  "Error opening output file '%s': %s", argv[2], strerror(errno));
         fclose(fin);
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
-    printf("Parsing input file...\n");
+    log_info(ERROR_CATEGORY_GENERAL, 0, "Parsing input file '%s'...", argv[1]);
 
     // Parse the program and build the AST
-    program = parse_program(fin);
+    ASTNode *program = parse_program(fin);
 
     #ifdef DEBUG
-        print_ast(program, 0); // Print the AST for debugging if -d is passed
+        print_ast(program, 0);
     #endif
 
-    // Generate VHDL code from the AST
-    if (program) {
-        printf("Generating VHDL code...\n");
-        generate_vhdl(program, fout);
-        free_node(program);
-    } else {
-        fprintf(fout, "-- VHDL code generation failed\n");
-        fprintf(fout, "-- AST was not generated successfully\n");
+    // Check for parse errors
+    if (!program || has_errors()) {
+        log_error(ERROR_CATEGORY_GENERAL, 0,
+                  "Parsing failed with %d error(s)", get_error_count());
+        if (program) {
+            free_node(program);
+        }
         fclose(fin);
         fclose(fout);
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
+
+    // Generate VHDL code from the AST
+    log_info(ERROR_CATEGORY_GENERAL, 0, "Generating VHDL code...");
+    generate_vhdl(program, fout);
+    free_node(program);
 
     fclose(fin);
     fclose(fout);
 
-    printf("Compilation finished.\n");
-    exit(EXIT_SUCCESS);
+    log_info(ERROR_CATEGORY_GENERAL, 0, "Compilation finished successfully.");
+    return EXIT_SUCCESS;
 }

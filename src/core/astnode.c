@@ -1,14 +1,19 @@
-#include "astnode.h"
+#include <stdio.h>
 #include <stdlib.h>
+
+#include "astnode.h"
+#include "error_handler.h"
+
+#define INITIAL_CHILDREN_CAPACITY 4
+#define CHILDREN_GROWTH_FACTOR   2
 
 // Create a new AST node
 ASTNode* create_node(NodeType type)
 {
-
     ASTNode *node = (ASTNode*)malloc(sizeof(ASTNode));
 
     if (!node) {
-        perror("Failed to allocate memory for AST node");
+        fprintf(stderr, "Fatal: Failed to allocate memory for AST node\n");
         exit(EXIT_FAILURE);
     }
     
@@ -25,7 +30,6 @@ ASTNode* create_node(NodeType type)
 // Free an AST node and all its children
 void free_node(ASTNode *node)
 {
-
     if (!node) {
         return;
     }
@@ -42,24 +46,30 @@ void free_node(ASTNode *node)
 // Add a child node
 void add_child(ASTNode *parent, ASTNode *child)
 {
+    if (!parent || !child) {
+        log_error(ERROR_CATEGORY_GENERAL, 0,
+                  "add_child called with NULL %s", !parent ? "parent" : "child");
+        return;
+    }
 
     if (!parent->children) {
-        parent->capacity = 4;  // Start with space for 4 children
-        parent->children = (ASTNode**)malloc(parent->capacity * sizeof(ASTNode*));
+        parent->capacity = INITIAL_CHILDREN_CAPACITY;
+        parent->children = (ASTNode**)malloc((size_t)parent->capacity * sizeof(ASTNode*));
         if (!parent->children) {
-            perror("Failed to allocate memory for child nodes");
-            exit(EXIT_FAILURE);
+            log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to allocate memory for child nodes");
+            return;
         }
     }
     
     if (parent->num_children >= parent->capacity) {
-        parent->capacity *= 2;
-        parent->children = (ASTNode**)realloc(parent->children, 
-                                             parent->capacity * sizeof(ASTNode*));
-        if (!parent->children) {
-            perror("Failed to reallocate memory for child nodes");
-            exit(EXIT_FAILURE);
+        parent->capacity *= CHILDREN_GROWTH_FACTOR;
+        ASTNode **new_children = (ASTNode**)realloc(parent->children, 
+                                             (size_t)parent->capacity * sizeof(ASTNode*));
+        if (!new_children) {
+            log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to reallocate memory for child nodes");
+            return;
         }
+        parent->children = new_children;
     }
     
     parent->children[parent->num_children++] = child;
