@@ -5,9 +5,9 @@
 # but available for users, tests, and future use
 unusedFunction:*error_handler.c
 
-# token.c: lookahead_char is initialized to 0 per project convention
-# (initialize at declaration) but always assigned via fgetc before read
-unreadVariable:*token.c
+# codegen_vhdl_emit.c: Public emitter API functions designed for reuse
+# Not all called yet but part of the intentional emit abstraction layer
+unusedFunction:*codegen_vhdl_emit.c
 
 # System includes are resolved by the compiler, not cppcheck
 missingIncludeSystem
