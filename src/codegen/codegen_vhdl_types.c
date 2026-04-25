@@ -246,48 +246,28 @@ static void process_variable_declaration_for_signals(ASTNode *var_decl)
     }
 }
 
-// -------------------------------------------------------------
-// Helper: Process variable declarations inside for loops
-// -------------------------------------------------------------
-static void process_for_loop_declarations(ASTNode *for_statement)
+static void emit_local_signal_declarations_from_subtree(ASTNode *node)
 {
-    for (int child_index = 0; child_index < for_statement->num_children; ++child_index)
+    if (node == NULL)
     {
-        const ASTNode *for_child = for_statement->children[child_index];
-        
-        if (for_child->type != NODE_VAR_DECL)
-        {
-            continue;
-        }
-        
-        const char *array_bracket = (for_child->value != NULL) ? strchr(for_child->value, '[') : NULL;
-        
-        if (array_bracket != NULL)
-        {
-            char array_name[ARRAY_NAME_BUFFER_SIZE] = {0};
-            char array_size[ARRAY_SIZE_BUFFER_SIZE] = {0};
-            if (parse_array_dimensions(for_child->value, array_name, array_size,
-                                      ARRAY_NAME_BUFFER_SIZE, ARRAY_SIZE_BUFFER_SIZE))
-            {
-                int array_element_count = 0;
-                const char *vhdl_element_type = NULL;
-                if (!safe_strtoi(array_size, &array_element_count))
-                {
-                    continue;
-                }
-                array_element_count -= 1;
-                vhdl_element_type = ctype_to_vhdl(for_child->token.value);
-                
-                emit_raw("  type %s_type is array (0 to %d) of %s;\n", 
-                        array_name, array_element_count, vhdl_element_type);
-                emit_raw("  signal %s : %s_type;\n", array_name, array_name);
-            }
-        }
-        else
-        {
-            emit_raw("  signal %s : %s;\n", 
-                    for_child->value, ctype_to_vhdl(for_child->token.value));
-        }
+        return;
+    }
+
+    ASTNode *effective_node = unwrap_statement_node(node);
+    if (effective_node == NULL)
+    {
+        return;
+    }
+
+    if (effective_node->type == NODE_VAR_DECL)
+    {
+        process_variable_declaration_for_signals(effective_node);
+        return;
+    }
+
+    for (int child_index = 0; child_index < effective_node->num_children; ++child_index)
+    {
+        emit_local_signal_declarations_from_subtree(effective_node->children[child_index]);
     }
 }
 
@@ -305,23 +285,8 @@ void emit_function_local_signals(ASTNode *function_declaration)
         {
             continue;
         }
-        
-        // Process each child within the statement block
-        for (int statement_child_index = 0; 
-             statement_child_index < child->num_children; 
-             ++statement_child_index)
-        {
-            ASTNode *statement_child = child->children[statement_child_index];
-            
-            if (statement_child->type == NODE_VAR_DECL)
-            {
-                process_variable_declaration_for_signals(statement_child);
-            }
-            else if (statement_child->type == NODE_FOR_STATEMENT)
-            {
-                process_for_loop_declarations(statement_child);
-            }
-        }
+
+        emit_local_signal_declarations_from_subtree(child);
     }
 }
 
@@ -382,14 +347,28 @@ static void emit_reset_assignment(const ASTNode *var_decl)
     }
 }
 
-// Emit reset assignments for variable declarations inside a for loop
-static void emit_for_loop_reset_assignments(ASTNode *for_statement)
+static void emit_reset_assignments_from_subtree(ASTNode *node)
 {
-    for (int i = 0; i < for_statement->num_children; ++i) {
-        const ASTNode *child = for_statement->children[i];
-        if (child->type == NODE_VAR_DECL) {
-            emit_reset_assignment(child);
-        }
+    if (node == NULL)
+    {
+        return;
+    }
+
+    ASTNode *effective_node = unwrap_statement_node(node);
+    if (effective_node == NULL)
+    {
+        return;
+    }
+
+    if (effective_node->type == NODE_VAR_DECL)
+    {
+        emit_reset_assignment(effective_node);
+        return;
+    }
+
+    for (int child_index = 0; child_index < effective_node->num_children; ++child_index)
+    {
+        emit_reset_assignments_from_subtree(effective_node->children[child_index]);
     }
 }
 
@@ -404,14 +383,6 @@ void emit_function_reset_logic(ASTNode *function_declaration)
             continue;
         }
 
-        for (int i = 0; i < child->num_children; ++i)
-        {
-            ASTNode *statement_child = child->children[i];
-            if (statement_child->type == NODE_VAR_DECL) {
-                emit_reset_assignment(statement_child);
-            } else if (statement_child->type == NODE_FOR_STATEMENT) {
-                emit_for_loop_reset_assignments(statement_child);
-            }
-        }
+        emit_reset_assignments_from_subtree(child);
     }
 }
