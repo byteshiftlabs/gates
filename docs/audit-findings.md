@@ -7,7 +7,8 @@
 - Overall recommendation: Release now
 
 This ledger reflects the current `main` branch after the GoogleTest FetchContent fix,
-the cppcheck follow-up, and the nested-loop local-signal fix.
+the cppcheck follow-up, the nested-loop local-signal fix, and the public-doc scope
+alignment for function-call limitations.
 
 ## Findings Table
 | ID | Severity | Confidence | Status | File | Issue | Verification |
@@ -15,6 +16,7 @@ the cppcheck follow-up, and the nested-loop local-signal fix.
 | B1 | Blocker | confirmed | fixed | src/codegen/codegen_vhdl_statements.c, tests/integration/integration_tests.cpp | Comparison-valued returns now lower to numeric 0/1 assignments instead of a raw boolean result-port assignment | targeted regression test, full `ctest`, generated example output |
 | S1 | Serious | confirmed | fixed | src/codegen/codegen_vhdl_types.c | Array initializer bit emission no longer shifts out of range for widths above the host integer width | `cmake --build <build-dir> --target cppcheck` |
 | B2 | Blocker | confirmed | fixed | src/codegen/codegen_vhdl_types.c, tests/integration/integration_tests.cpp, examples/example.c | Nested loop-local variables are now hoisted and reset correctly, so shipped examples no longer emit undeclared inner loop signals | generated example output, targeted regression test, full `ctest` |
+| M1 | Minor | confirmed | fixed | README.md, docs/source/index.rst, docs/source/examples.rst, examples/function_calls.c | Public-facing function-call wording now matches the documented limitation that inter-entity wiring is not yet synthesized | targeted doc review, `./build_docs.sh` |
 
 ## Detailed Findings
 
@@ -44,6 +46,15 @@ the cppcheck follow-up, and the nested-loop local-signal fix.
 - Fix: High-bit extraction is now guarded; positions above the host integer width no longer shift out of range and negative values are sign-extended instead.
 - Verification: The `cppcheck` build target passes locally and in CI.
 
+### Minor
+#### M1
+- Location: README.md, docs/source/index.rst, docs/source/examples.rst, examples/function_calls.c
+- Confidence: confirmed
+- Status: fixed
+- Problem: Public-facing docs and examples described function-call support too broadly even though cross-function hardware wiring is still a documented limitation.
+- Fix: Narrowed the feature wording to self-contained functions, added an explicit limitation note in the examples docs, and marked the shipped `function_calls.c` sample as parser/codegen coverage rather than a supported hardware-composition example.
+- Verification: Reviewed the updated public docs against `docs/source/known_issues.rst` and rebuilt the docs.
+
 ## Coverage Matrix
 | Surface | Files / Modules | Status | Notes |
 |---------|------------------|--------|-------|
@@ -54,7 +65,7 @@ the cppcheck follow-up, and the nested-loop local-signal fix.
 | Error handling | src/error_handler.c | reviewed | No new material issues found in the audited release pass |
 | Core and symbol utilities | src/core/utils.c, src/core/astnode.c, src/symbols/symbol_structs.c, src/symbols/symbol_arrays.c | reviewed | No new material issues found in the audited release pass |
 | Tests | tests/integration/integration_tests.cpp, tests/unit/basic_tests.cpp, tests/unit/edge_case_tests.cpp, tests/unit/test_error_handler.cpp | reviewed | Full suite passes; nested-loop regression added |
-| Documentation | README.md, docs/source/**, CONTRIBUTING.md, ROADMAP.md | partially reviewed | Docs are acceptable for release, but simulator validation remains documented as a limitation |
+| Documentation | README.md, docs/source/**, CONTRIBUTING.md, ROADMAP.md | partially reviewed | Docs now scope function support to self-contained cases; simulator validation remains documented as a limitation |
 | Static analysis | cppcheck target | reviewed | Passes |
 | Generated VHDL validity | CLI output from examples/example.c | reviewed | Shipped example manually rechecked after nested-loop fix |
 | CI / automation | .github/workflows/ci.yml | reviewed | Latest CI run covers configure, tests, docs, version smoke, and cppcheck |

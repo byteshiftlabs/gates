@@ -1,4 +1,7 @@
-// Test file for function call support
+// Test file for parser-level function call support.
+// Cross-function hardware wiring is not yet synthesized, so this file is
+// useful for parser/codegen inspection rather than as a supported hardware
+// composition example.
 
 // Simple function to add two numbers
 int add(int a, int b) {

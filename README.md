@@ -70,10 +70,10 @@ Each C function becomes a VHDL entity with clock/reset ports, input parameters a
 
 - Recursive-descent parser with full operator precedence
 - Control flow: `if/else`, `while`, `for`, `break`, `continue`
-- Functions with return value propagation, structs, and arrays
+- Self-contained functions with return value propagation, plus structs and arrays
 - VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
 - Multi-level error diagnostics (error/warning/note across 5 categories)
-- 75 unit, integration, and edge case tests (GoogleTest)
+- 76 unit, integration, and edge case tests (GoogleTest)
 
 ## Requirements
 
@@ -114,6 +114,7 @@ examples/      — Sample C input files
 - No nested structs or arrays of structs
 - No pointer support
 - No `switch/case` or `do-while`
+- Function calls are parsed, but cross-function hardware wiring is not yet synthesized. Multi-function files emit independent entities, so keep hardware-generating examples self-contained.
 - Generated VHDL targets the currently supported C subset, but automated simulator verification is not yet part of the test/CI flow. The output is also unoptimized — no resource sharing, no pipelining, no constant folding (see [ROADMAP.md](ROADMAP.md) Phase 4 for planned optimizations)
 
 ## Documentation

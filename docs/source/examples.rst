@@ -60,6 +60,10 @@ Each C function becomes an entity with clock/reset ports, parameters as
 ``std_logic_vector`` inputs, and a ``result`` output. Local variables become
 signals with zero-initialized reset logic.
 
+Cross-function calls are still a documented limitation: multi-function inputs
+emit separate entities, but gates does not yet synthesize the inter-entity
+wiring needed to connect them automatically.
+
 Control Flow (if/else)
 ----------------------
 
