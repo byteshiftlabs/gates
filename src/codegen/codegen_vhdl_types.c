@@ -386,7 +386,7 @@ static void emit_reset_assignment(const ASTNode *var_decl)
 static void emit_for_loop_reset_assignments(ASTNode *for_statement)
 {
     for (int i = 0; i < for_statement->num_children; ++i) {
-        ASTNode *child = for_statement->children[i];
+        const ASTNode *child = for_statement->children[i];
         if (child->type == NODE_VAR_DECL) {
             emit_reset_assignment(child);
         }
