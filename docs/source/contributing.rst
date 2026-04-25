@@ -12,7 +12,7 @@ Development Setup
    cd compi && mkdir build && cd build
    cmake .. -DCMAKE_BUILD_TYPE=Debug
    cmake --build .
-   ctest   # Verify all 62 tests pass
+   ctest   # Verify all 74 tests pass
 
 Branch Naming
 -------------
