@@ -28,13 +28,6 @@ The compiler is structured as a pipeline:
 4. **Utilities (utils.c / utils.h)**
     - Provides string manipulation, memory management, AST printing, and numeric conversion helpers.
 
-5. **Testing (tests/*.cpp)**
-    - GoogleTest unit, integration, and edge case tests (62 total).
-    - Covers AST construction, utilities, lexer tokenization, error handling,
-      end-to-end C→VHDL translation, and boundary conditions.
-    - Each test is discovered individually via ``gtest_discover_tests`` allowing
-      granular execution through CTest or direct GoogleTest filters.
-
 The modular design allows for easy extension to new C constructs and VHDL features.
 
 Overview
@@ -82,12 +75,4 @@ The compiler uses global state in several modules for simplicity and performance
 - **Reset**: Call ``reset_struct_table()`` and ``reset_array_table()`` between compilations.
 
 **Future Consideration**: If multi-threaded compilation is needed, these modules should be refactored to use a context struct passed through the call chain.
-
-Testing Workflow
-----------------
-
-1. Configure with ``-DENABLE_TESTING=ON`` (default).
-2. Build and run tests: ``cmake --build build --target test_all``.
-3. Inspect or filter tests: ``ctest -N`` / ``ctest -R <regex>``.
-4. Use direct filtering: ``./build/gates_tests --gtest_filter=TokenTests.*``.
 

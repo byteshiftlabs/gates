@@ -8,8 +8,8 @@ Development Setup
 
 .. code-block:: bash
 
-   git clone https://github.com/byteshiftlabs/compi.git
-   cd compi && mkdir build && cd build
+   git clone https://github.com/byteshiftlabs/gates.git
+   cd gates && mkdir build && cd build
    cmake .. -DCMAKE_BUILD_TYPE=Debug
    cmake --build .
    ctest   # Verify all 74 tests pass
