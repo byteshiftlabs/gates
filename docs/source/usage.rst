@@ -7,11 +7,12 @@ Command Line
 .. code-block:: bash
 
    ./gates <input.c> <output.vhdl>
+   ./gates --version
 
 - **Input**: A C source file (``.c``). Must contain at least one function or
   struct definition.
 - **Output**: A VHDL file (``.vhdl``). Created or overwritten.
-- Both arguments are required.
+- Both arguments are required unless ``--version`` is used.
 
 Exit Codes
 ----------

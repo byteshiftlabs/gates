@@ -20,7 +20,7 @@ Introduction
 ------------
 
 Gates is a minimal C-to-VHDL translator. It parses a subset of C and generates
-synthesizable VHDL with clock/reset ports, signals, and synchronous processes.
+clocked VHDL for its supported subset, with clock/reset ports, signals, and synchronous processes.
 
 Features
 --------
@@ -30,7 +30,7 @@ Features
 - Functions with return value propagation, structs with field access, arrays with indexing
 - VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
 - Multi-level error diagnostics with colored output (error/warning/note across 5 categories)
-- 62 unit, integration, and edge case tests (GoogleTest), Valgrind clean
+- 75 unit, integration, and edge case tests (GoogleTest)
 
 See :doc:`examples` for C-to-VHDL translation samples and :doc:`modules` for the
 complete source code reference.

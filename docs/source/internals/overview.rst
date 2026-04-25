@@ -341,7 +341,7 @@ Testing Strategy
 
 See :doc:`../testing` for detailed testing documentation.
 
-- **74 tests** (47 unit + 27 integration/end-to-end)
+- **75 tests** across unit, integration, and end-to-end coverage
 - GoogleTest framework
 - Tests cover: lexer, parser, code generator, error handler, symbol tables
 - All tests pass with zero warnings in both release and debug configurations

@@ -1,6 +1,6 @@
-# Contributing to Compi
+# Contributing to Gates
 
-We welcome contributions to the C-to-VHDL compiler project.
+We welcome contributions to the Gates C-to-VHDL translator project.
 
 ## How to Contribute
 

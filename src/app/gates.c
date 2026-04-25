@@ -10,9 +10,18 @@
 // Minimum: program name + input file + output file
 #define MIN_ARGC 3
 
+#ifndef GATES_VERSION
+#define GATES_VERSION "unknown"
+#endif
+
 
 int main(int argc, char *argv[])
 {
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+        printf("gates %s\n", GATES_VERSION);
+        return EXIT_SUCCESS;
+    }
+
     if (argc < MIN_ARGC) {
         log_error(ERROR_CATEGORY_GENERAL, 0,
                   "Usage: %s <input.c> <output.vhdl>", argv[0]);
