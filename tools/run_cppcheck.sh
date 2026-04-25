@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run cppcheck static analysis on compi source code
+# Run cppcheck static analysis on gates source code
 # Exit code 0 = clean, 1 = issues found
 set -euo pipefail
 
