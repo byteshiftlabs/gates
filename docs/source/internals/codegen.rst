@@ -50,7 +50,7 @@ Node Dispatcher
 ---------------
 
 generate_node()
-~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Internal function that dispatches to specialized generators based on node type:
 
@@ -82,7 +82,7 @@ Program Generation
 ------------------
 
 generate_program()
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Generates VHDL preamble and processes all top-level functions:
 
@@ -131,7 +131,7 @@ Function Generation
 -------------------
 
 generate_function_declaration()
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Converts C function to VHDL entity + architecture:
 
@@ -289,7 +289,7 @@ Statement Generation
 --------------------
 
 generate_statement_block()
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Processes statement nodes and delegates to specific handlers:
 
@@ -831,7 +831,7 @@ Struct Support
 --------------
 
 emit_all_struct_declarations()
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Generates VHDL record types for C structs:
 
