@@ -1,4 +1,4 @@
-Welcome to Compi's documentation!
+Welcome to Gates's documentation!
 =================================
 
 .. toctree::
@@ -19,7 +19,7 @@ Welcome to Compi's documentation!
 Introduction
 ------------
 
-Compi is a minimal C-to-VHDL translator. It parses a subset of C and generates
+Gates is a minimal C-to-VHDL translator. It parses a subset of C and generates
 synthesizable VHDL with clock/reset ports, signals, and synchronous processes.
 
 Features

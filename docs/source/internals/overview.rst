@@ -4,7 +4,7 @@ Architecture Overview
 System Architecture
 -------------------
 
-The Compi compiler is structured as a multi-stage pipeline:
+The Gates compiler is structured as a multi-stage pipeline:
 
 .. code-block:: text
 
@@ -100,7 +100,7 @@ Directory Structure
 
 .. code-block:: text
 
-   compi/
+   gates/
    ├── CMakeLists.txt          # CMake build configuration
    ├── README.md               # Project overview
    ├── LICENSE                  # GPL v3
@@ -121,7 +121,7 @@ Directory Structure
    ├── src/                    # Source code
    │   ├── error_handler.c     # Error handler implementation
    │   ├── app/                # Application entry point
-   │   │   └── compi.c         # Main function
+   │   │   └── gates.c         # Main function
    │   ├── core/               # Core data structures
    │   │   ├── astnode.c       # AST node create/add_child/free
    │   │   └── utils.c         # Utilities (safe_strdup, print_ast, etc.)
@@ -182,7 +182,7 @@ Main Compilation Flow
 
 .. code-block:: c
 
-   // Actual flow in compi.c (simplified)
+   // Actual flow in gates.c (simplified)
    int main(int argc, char *argv[]) {
        FILE *fin  = fopen(argv[1], "r");
        FILE *fout = fopen(argv[2], "w");
@@ -263,7 +263,7 @@ The compiler uses a centralized error reporting system in ``error_handler.h/c``:
 
 Parser functions return ``NULL`` on error (after logging via ``log_error``).
 Parsing loops check ``has_errors()`` to stop iteration after the first error.
-The application (``compi.c``) checks ``has_errors()`` before proceeding to
+The application (``gates.c``) checks ``has_errors()`` before proceeding to
 code generation.
 
 Debug Mode
@@ -280,20 +280,20 @@ Build System
 CMake Configuration
 ^^^^^^^^^^^^^^^^^^^
 
-The project uses CMake for cross-platform builds:
+The project uses CMake and targets Ubuntu 24.04 x86_64:
 
 - Minimum CMake version: 3.14
 - C standard: C11
 - C++ standard: C++17 (for GoogleTest)
-- Compiler flags: ``-Wall -Wextra -Wpedantic``
-- Debug flags: ``-g -O0 -DDEBUG`` (when ``-DDEBUG=ON``)
-- Release flags: ``-O3`` (default)
+- Compiler flags: ``-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion``
+- Debug mode: Add ``-DDEBUG`` definition (when ``-DDEBUG=ON``)
+- No optimization flags specified (uses compiler defaults)
 
 Build Targets
 ^^^^^^^^^^^^^
 
-- ``compi`` — Main compiler executable
-- ``compi_tests`` — GoogleTest test executable
+- ``gates`` — Main compiler executable
+- ``gates_tests`` — GoogleTest test executable
 - ``cppcheck`` — Run cppcheck static analysis
 - ``docs`` — Build Sphinx HTML documentation
 
@@ -303,6 +303,7 @@ Dependencies
 External Dependencies
 ^^^^^^^^^^^^^^^^^^^^^
 
+- **Platform**: Ubuntu 24.04 x86_64
 - **Standard C Library**: ``stdio.h``, ``stdlib.h``, ``string.h``, etc.
 - **GoogleTest**: Unit testing framework (fetched via CMake FetchContent, v1.14.0, SHA256-pinned)
 - **Sphinx**: Documentation generation (Python)
@@ -317,7 +318,7 @@ Module dependency graph (``→`` means "depends on"):
 
 .. code-block:: text
 
-   src/app/compi.c
+   src/app/gates.c
      → parse.h, codegen_vhdl.h, error_handler.h, utils.h
 
    src/parser/parse.c

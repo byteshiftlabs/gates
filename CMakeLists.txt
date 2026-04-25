@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(compi VERSION 0.1 LANGUAGES C CXX)
+project(gates VERSION 0.2.0 LANGUAGES C CXX)
 
 # If a Conan toolchain file was injected at the super-project level but is missing pieces,
 # allow an opt-out for this standalone build by setting SKIP_PARENT_TOOLCHAIN.
@@ -10,11 +10,11 @@ endif()
 option(DEBUG "Enable debug features" OFF)
 list(APPEND CMAKE_ARGS_C -DDEBUG=${DEBUG})
 
-# Configurable limits (can be overridden via cmake -DCOMPI_VHDL_BIT_WIDTH=64 ..)
-set(COMPI_VHDL_BIT_WIDTH 32 CACHE STRING "Bit width for VHDL integer types (8-128)")
-set(COMPI_MAX_PARAMETERS 128 CACHE STRING "Maximum function parameters (1-1024)")
-set(COMPI_MAX_STRUCTS 64 CACHE STRING "Maximum struct definitions")
-set(COMPI_MAX_ARRAYS 128 CACHE STRING "Maximum tracked arrays")
+# Configurable limits (can be overridden via cmake -DGATES_VHDL_BIT_WIDTH=64 ..)
+set(GATES_VHDL_BIT_WIDTH 32 CACHE STRING "Bit width for VHDL integer types (8-128)")
+set(GATES_MAX_PARAMETERS 128 CACHE STRING "Maximum function parameters (1-1024)")
+set(GATES_MAX_STRUCTS 64 CACHE STRING "Maximum struct definitions")
+set(GATES_MAX_ARRAYS 128 CACHE STRING "Maximum tracked arrays")
 
 # Set C standard
 set(CMAKE_C_STANDARD 11)
@@ -22,7 +22,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Collect all C sources
 # List sources explicitly (begin modular refactor) instead of broad glob
-set(COMPI_ALL_SRC
+set(GATES_ALL_SRC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/core/astnode.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_expression.c
@@ -46,39 +46,39 @@ set(COMPI_ALL_SRC
 )
 
 # Separate main file to allow creating a reusable core library for tests
-set(COMPI_MAIN_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/app/compi.c")
-set(compi_gtest_SRC ${COMPI_ALL_SRC})
-list(REMOVE_ITEM compi_gtest_SRC "${COMPI_MAIN_SRC}")
+set(GATES_MAIN_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/app/gates.c")
+set(gates_gtest_SRC ${GATES_ALL_SRC})
+list(REMOVE_ITEM gates_gtest_SRC "${GATES_MAIN_SRC}")
 
-add_library(compi_gtest ${compi_gtest_SRC})
-target_include_directories(compi_gtest PUBLIC
+add_library(gates_gtest ${gates_gtest_SRC})
+target_include_directories(gates_gtest PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_compile_definitions(compi_gtest PUBLIC
-  COMPI_VHDL_BIT_WIDTH=${COMPI_VHDL_BIT_WIDTH}
-  COMPI_MAX_PARAMETERS=${COMPI_MAX_PARAMETERS}
-  COMPI_MAX_STRUCTS=${COMPI_MAX_STRUCTS}
-  COMPI_MAX_ARRAYS=${COMPI_MAX_ARRAYS}
+target_compile_definitions(gates_gtest PUBLIC
+  GATES_VHDL_BIT_WIDTH=${GATES_VHDL_BIT_WIDTH}
+  GATES_MAX_PARAMETERS=${GATES_MAX_PARAMETERS}
+  GATES_MAX_STRUCTS=${GATES_MAX_STRUCTS}
+  GATES_MAX_ARRAYS=${GATES_MAX_ARRAYS}
 )
 
-add_executable(compi ${COMPI_MAIN_SRC})
-target_link_libraries(compi PRIVATE compi_gtest)
+add_executable(gates ${GATES_MAIN_SRC})
+target_link_libraries(gates PRIVATE gates_gtest)
 
 # Add compiler warnings
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(compi_gtest PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
-  target_compile_options(compi PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  target_compile_options(gates_gtest PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  target_compile_options(gates PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
 endif()
 
 if(DEBUG)
   message(STATUS "DEBUG enabled")
-  target_compile_definitions(compi_gtest PUBLIC DEBUG)
-  target_compile_definitions(compi PRIVATE DEBUG)
+  target_compile_definitions(gates_gtest PUBLIC DEBUG)
+  target_compile_definitions(gates PRIVATE DEBUG)
 endif()
 
 # Install targets
-install(TARGETS compi RUNTIME DESTINATION bin)
+install(TARGETS gates RUNTIME DESTINATION bin)
 
 # =====================
 # Static Analysis (cppcheck)
@@ -139,17 +139,17 @@ if(ENABLE_TESTING)
 
   file(GLOB TEST_SOURCES "tests/*.cpp" "tests/*.cc" "tests/*.cxx")
   if(TEST_SOURCES)
-    add_executable(compi_tests ${TEST_SOURCES})
+    add_executable(gates_tests ${TEST_SOURCES})
     if(TARGET GTest::gtest_main)
-      target_link_libraries(compi_tests PRIVATE GTest::gtest_main compi_gtest)
+      target_link_libraries(gates_tests PRIVATE GTest::gtest_main gates_gtest)
     elseif(TARGET gtest_main)
-      target_link_libraries(compi_tests PRIVATE gtest_main compi_gtest)
+      target_link_libraries(gates_tests PRIVATE gtest_main gates_gtest)
     elseif(TARGET gtest)
-      target_link_libraries(compi_tests PRIVATE gtest compi_gtest)
+      target_link_libraries(gates_tests PRIVATE gtest gates_gtest)
     else()
       message(FATAL_ERROR "No gtest_main or gtest target available")
     endif()
-    target_include_directories(compi_tests PRIVATE
+    target_include_directories(gates_tests PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/include
       ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
@@ -157,7 +157,7 @@ if(ENABLE_TESTING)
     # Discover each GoogleTest test case so they show individually in CTest
     include(GoogleTest)
     gtest_discover_tests(
-      compi_tests
+      gates_tests
       DISCOVERY_TIMEOUT 30
       # Optionally set WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )

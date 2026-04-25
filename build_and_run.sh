@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build_and_run.sh - Convenience script to configure, build, test (optional) and run the 'compi' executable
+# build_and_run.sh - Convenience script to configure, build, test (optional) and run the 'gates' executable
 #
 # Features:
 #  - Idempotent incremental builds (reconfigure only when needed)
@@ -119,24 +119,24 @@ else
 fi
 
 # Build
-BUILD_CMD=(cmake --build "$BUILD_DIR" --target compi)
+BUILD_CMD=(cmake --build "$BUILD_DIR" --target gates)
 if [[ -n "$JOBS" ]]; then BUILD_CMD+=(-- -j"$JOBS"); fi
 if [[ $VERBOSE -eq 1 ]]; then BUILD_CMD+=(--verbose); fi
-info "Building target 'compi'"
+info "Building target 'gates'"
 "${BUILD_CMD[@]}" || { err "Build failed"; exit 1; }
 
 # Optional tests
 if [[ $RUN_TESTS -eq 1 ]]; then
-  if [[ -x "$BUILD_DIR/compi_tests" ]]; then
-    info "Running tests (compi_tests)"
+  if [[ -x "$BUILD_DIR/gates_tests" ]]; then
+    info "Running tests (gates_tests)"
     (cd "$BUILD_DIR" && ctest --output-on-failure) || { err "Tests failed"; exit 1; }
   else
-    warn "Tests requested but compi_tests not built (maybe ENABLE_TESTING=OFF or no tests present)."
+    warn "Tests requested but gates_tests not built (maybe ENABLE_TESTING=OFF or no tests present)."
   fi
 fi
 
 # Run executable
-EXEC_PATH="$BUILD_DIR/compi"
+EXEC_PATH="$BUILD_DIR/gates"
 if [[ ! -x "$EXEC_PATH" ]]; then
   err "Executable not found: $EXEC_PATH"; exit 1
 fi

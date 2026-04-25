@@ -6,11 +6,11 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'compi'
+project = 'gates'
 copyright = '2025-2026, cmelnu'
 author = 'cmelnu'
-version = '0.1'
-release = '0.1'
+version = '0.2.0'
+release = '0.2.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -46,7 +46,7 @@ html_css_files = [
 html_context = {
     'display_github': True,
     'github_user': 'cmelnu',
-    'github_repo': 'compi',
+    'github_repo': 'gates',
     'github_version': 'main',
     'conf_py_path': '/docs/source/',
 }

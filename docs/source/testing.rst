@@ -34,7 +34,7 @@ Running Tests
    ctest --test-dir build -R UtilsTests
 
    # Run a single test directly via GoogleTest filtering
-   ./build/compi_tests --gtest_filter=TokenTests.BasicLexing
+   ./build/gates_tests --gtest_filter=TokenTests.BasicLexing
 
 Convenience Targets
 -------------------
@@ -54,8 +54,8 @@ manual edit to ``CMakeLists.txt`` is required.
 Internals / Notes
 -----------------
 
-* Tests link against the reusable ``compi_gtest`` static library (all C sources
-  except the CLI ``compi.c``) to avoid duplicating logic.
+* Tests link against the reusable ``gates_gtest`` static library (all C sources
+  except the CLI ``gates.c``) to avoid duplicating logic.
 * Some tests touch internal global variables (e.g. ``g_array_count``,
   ``current_token``). Future refactors may wrap these with a fixture to
   improve isolation.

@@ -6,7 +6,7 @@ Command Line
 
 .. code-block:: bash
 
-   ./compi <input.c> <output.vhdl>
+   ./gates <input.c> <output.vhdl>
 
 - **Input**: A C source file (``.c``). Must contain at least one function or
   struct definition.
@@ -44,7 +44,7 @@ Successful compilation:
 
 .. code-block:: bash
 
-   $ ./compi examples/example.c output.vhdl
+   $ ./gates examples/example.c output.vhdl
    info[General] Parsing input file 'examples/example.c'...
    info[General] Generating VHDL code...
    info[General] Compilation finished successfully.
@@ -53,7 +53,7 @@ Parse error:
 
 .. code-block:: bash
 
-   $ ./compi bad.c output.vhdl
+   $ ./gates bad.c output.vhdl
    error[Parser] line 2: Expected ')' after parameter list
    error[General] Parsing failed with 1 error(s)
 
@@ -61,7 +61,7 @@ Missing file:
 
 .. code-block:: bash
 
-   $ ./compi nonexistent.c out.vhdl
+   $ ./gates nonexistent.c out.vhdl
    error[General] Error opening input file 'nonexistent.c': No such file or directory
 
 See :doc:`examples` for full C-to-VHDL translation samples.
@@ -96,7 +96,7 @@ Unit tests use GoogleTest and are auto-discovered. Common commands:
    ctest --test-dir build -R UtilsTests
 
    # Run single test directly
-   ./build/compi_tests --gtest_filter=TokenTests.BasicLexing
+   ./build/gates_tests --gtest_filter=TokenTests.BasicLexing
 
 See :doc:`testing` for full details.
 
