@@ -63,61 +63,63 @@ void generate_binary_expression(ASTNode *node, void (*node_generator)(ASTNode*))
         return;
     }
 
-    // Bitwise operations
+    // Bitwise operations — result is unsigned, wrap in std_logic_vector
     if (strcmp(op, OP_BITWISE_AND) == 0)
     {
-        emit_raw("unsigned(");
+        emit_raw("std_logic_vector(unsigned(");
         node_generator(left_operand);
         emit_raw(") and unsigned(");
         node_generator(right_operand);
-        emit_raw(")");
+        emit_raw("))");
         return;
     }
     
     if (strcmp(op, OP_BITWISE_OR) == 0)
     {
-        emit_raw("unsigned(");
+        emit_raw("std_logic_vector(unsigned(");
         node_generator(left_operand);
         emit_raw(") or unsigned(");
         node_generator(right_operand);
-        emit_raw(")");
+        emit_raw("))");
         return;
     }
     
     if (strcmp(op, OP_BITWISE_XOR) == 0)
     {
-        emit_raw("unsigned(");
+        emit_raw("std_logic_vector(unsigned(");
         node_generator(left_operand);
         emit_raw(") xor unsigned(");
         node_generator(right_operand);
-        emit_raw(")");
+        emit_raw("))");
         return;
     }
     
     if (strcmp(op, OP_SHIFT_LEFT) == 0)
     {
-        emit_raw("shift_left(unsigned(");
+        emit_raw("std_logic_vector(shift_left(unsigned(");
         node_generator(left_operand);
         emit_raw("), to_integer(unsigned(");
         node_generator(right_operand);
-        emit_raw("))))");
+        emit_raw(")))))");
         return;
     }
     
     if (strcmp(op, OP_SHIFT_RIGHT) == 0)
     {
-        emit_raw("shift_right(unsigned(");
+        emit_raw("std_logic_vector(shift_right(unsigned(");
         node_generator(left_operand);
         emit_raw("), to_integer(unsigned(");
         node_generator(right_operand);
-        emit_raw("))))");
+        emit_raw(")))))");
         return;
     }
 
-    // Fallback: arithmetic or unknown operators
-    node_generator(left_operand);
+    // Fallback: arithmetic — use typed operands and wrap in std_logic_vector
+    emit_raw("std_logic_vector(");
+    emit_typed_operand(left_operand, 0, node_generator);
     emit_raw(" %s ", op);
-    node_generator(right_operand);
+    emit_typed_operand(right_operand, 0, node_generator);
+    emit_raw(")");
 }
 
 // Map C identifiers, array accesses, struct fields, and literals to VHDL signals.
@@ -141,12 +143,23 @@ void generate_expression(ASTNode *node)
     {
         if (isalpha(node->value[1]) || node->value[1] == '_')
         {
-            emit_raw("-unsigned(%s)", node->value + 1);
+            emit_raw("std_logic_vector(0 - unsigned(%s))", node->value + 1);
         }
         else
         {
+            emit_raw("std_logic_vector(");
             emit_signed_cast(node->value);
+            emit_raw(")");
         }
+        return;
+    }
+
+    // Positive numeric literals: emit as std_logic_vector(to_unsigned(N, BIT_WIDTH))
+    if (is_numeric_literal(node->value))
+    {
+        emit_raw("std_logic_vector(");
+        emit_unsigned_cast(node->value);
+        emit_raw(")");
         return;
     }
 
@@ -204,9 +217,9 @@ void generate_unary_operation(ASTNode *node, void (*node_generator)(ASTNode*))
     }
     else if (strcmp(node->value, OP_BITWISE_NOT) == 0)
     {
-        emit_raw("not unsigned(");
+        emit_raw("std_logic_vector(not unsigned(");
         node_generator(inner_expression);
-        emit_raw(")");
+        emit_raw("))");
     }
     else
     {
