@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(gates VERSION 0.2.0 LANGUAGES C CXX)
+project(gates VERSION 0.2.1 LANGUAGES C CXX)
 
 # If a Conan toolchain file was injected at the super-project level but is missing pieces,
 # allow an opt-out for this standalone build by setting SKIP_PARENT_TOOLCHAIN.
