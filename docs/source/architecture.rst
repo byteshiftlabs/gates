@@ -59,7 +59,7 @@ Developer Debug Output
 Global State and Threading
 --------------------------
 
-The compiler uses global state in several modules for simplicity and performance:
+The compiler uses global state in several modules to keep the current single-file pipeline simple:
 
 **Error Handler** (``error_handler.c``):
 
@@ -70,7 +70,7 @@ The compiler uses global state in several modules for simplicity and performance
 **Symbol Tables** (``symbol_structs.c``, ``symbol_arrays.c``):
 
 - Global tables for struct definitions and array size tracking.
-- **Rationale**: Struct types and array sizes are needed during code generation but are discovered during parsing. A global table provides O(1) lookup without threading pointers through the AST.
+- **Rationale**: Struct types and array sizes are needed during code generation but are discovered during parsing. A global table keeps that information available without threading additional context through the AST.
 - **Limitation**: Not thread-safe. For parallel compilation, each thread would need isolated symbol tables.
 - **Reset**: Call ``reset_struct_table()`` and ``reset_array_table()`` between compilations.
 

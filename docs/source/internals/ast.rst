@@ -51,8 +51,8 @@ The core AST node structure is defined in ``include/astnode.h``:
 .. code-block:: text
 
    ASTNode (stack or heap)
-     ├─ type: NodeType (4 bytes)
-     ├─ token: Token struct (264 bytes)
+    ├─ type: NodeType
+    ├─ token: Token struct
      ├─ value: char* → heap-allocated string
      ├─ parent: ASTNode*
      ├─ children: ASTNode** → heap-allocated array
@@ -239,7 +239,7 @@ Adds a child node to a parent node, growing the children array if necessary:
 **Behavior:**
 
 * **Lazy initialization**: Allocates children array on first child (initial capacity = 4)
-* **Dynamic growth**: Doubles capacity when array is full (amortized O(1) insertion)
+* **Dynamic growth**: Doubles capacity when the current array is full
 * **Bidirectional links**: Sets child's ``parent`` pointer for bottom-up traversal
 * **Null safety**: Checks for NULL ``parent`` or ``child`` parameters
 * **Error handling**: Reports errors via ``log_error()`` and returns early on allocation failure (no ``exit``)
@@ -541,37 +541,13 @@ Memory Management Patterns
 * Parent nodes "own" their children (responsible for freeing them)
 * Root node must be freed with ``free_node()`` to avoid leaks
 
-Performance Characteristics
-----------------------------
+Operational Characteristics
+---------------------------
 
-**Node creation:**
-
-* Time: O(1)
-* Space: ~280 bytes per node (struct + initial overhead)
-
-**Child addition:**
-
-* Amortized time: O(1) (due to doubling strategy)
-* Worst case: O(n) when array needs reallocation
-* Space: Wastes at most 50% of allocated capacity
-
-**Tree traversal:**
-
-* Time: O(n) where n is total number of nodes
-* Space: O(h) stack depth where h is tree height (for recursive traversal)
-
-**Memory overhead:**
-
-* Node struct: 280+ bytes
-* Children array: 8 bytes per child slot (64-bit pointers)
-* Wasted capacity: Up to 50% of children array (due to doubling)
-
-**Example memory usage for 100-node AST:**
-
-* Node structs: ~28 KB
-* Value strings: Variable (depends on identifier lengths)
-* Children arrays: ~3 KB (assuming average 4 children per node with 50% waste)
-* **Total: ~32-40 KB**
+* Node allocation is explicit and paired with ``free_node()`` cleanup
+* Child arrays are created lazily and expanded as the tree grows
+* Recursive traversal utilities depend on tree depth and structure
+* Memory use depends on node count, child fan-out, and stored string values
 
 Design Decisions
 ----------------
@@ -585,7 +561,7 @@ Design Decisions
 
 **Dynamic children array:**
 
-* **Pro**: Efficient for nodes with many children (statements, function bodies)
+* **Pro**: Works well for nodes with many children (statements, function bodies)
 * **Pro**: No fixed limits on tree width
 * **Con**: Memory overhead for leaf nodes (NULL children array)
 * **Con**: Reallocation overhead during tree construction
@@ -594,7 +570,7 @@ Design Decisions
 
 * **Pro**: Enables bottom-up traversal (child to parent)
 * **Pro**: Useful for semantic analysis (e.g., finding enclosing function)
-* **Con**: Extra 8 bytes per node for ``parent`` pointer
+* **Con**: Additional per-node storage for the ``parent`` pointer
 * **Con**: Must maintain invariant during tree manipulation
 
 **String values:**
@@ -633,8 +609,8 @@ The AST implementation provides:
 
 * **Simple, uniform node structure** with dynamic children arrays
 * **Minimal memory management API**: ``create_node()``, ``add_child()``, ``free_node()``
-* **Efficient child storage** with amortized O(1) insertion
+* **Geometric child-array growth** as nodes are added
 * **Bidirectional tree links** for flexible traversal
-* **Recursive memory deallocation** for easy cleanup
+* **Recursive memory deallocation** for straightforward cleanup
 
-The design prioritizes **simplicity and ease of use** over memory efficiency, making it straightforward to construct and traverse the AST during parsing and code generation.
+The design prioritizes **simplicity and ease of use** over more specialized representations, making it straightforward to construct and traverse the AST during parsing and code generation.

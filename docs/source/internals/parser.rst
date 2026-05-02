@@ -2106,5 +2106,5 @@ The parser is a **modular recursive descent parser** with **precedence climbing*
 * Tracks symbols for array bounds checking
 * Uses fail-fast error handling with ``return NULL (or return for void functions)``
 
-The design prioritizes **simplicity and clarity** over advanced features like error recovery or performance optimization. It provides a solid foundation for the compiler while being easy to understand and extend.
+The design prioritizes **simplicity and clarity** over advanced features like error recovery. It provides a straightforward foundation for the compiler while remaining easy to understand and extend.
 

@@ -29,8 +29,8 @@ Key operations:
 
 - ``register_struct(name)`` — Returns index, prevents duplicates
 - ``register_struct_field(index, type, name)`` — Adds field (max 32 per struct)
-- ``find_struct_index(name)`` — O(n) linear search
-- ``get_struct_info(index)`` — O(1) direct access
+- ``find_struct_index(name)`` — Linear search by struct name
+- ``get_struct_info(index)`` — Direct access by stored index
 - ``reset_struct_table()`` — Clears all entries between compilations
 
 Global capacity: ``MAX_STRUCTS`` (64). Used to emit VHDL record type definitions.
@@ -50,7 +50,7 @@ Stores array variable names and their sizes for bounds checking and VHDL generat
 Key operations:
 
 - ``register_array(name, size)`` — Adds or updates (prevents duplicates)
-- ``find_array_size(name)`` — O(n) linear search, returns size or -1
+- ``find_array_size(name)`` — Linear search by array name, returns size or -1
 - ``reset_array_table()`` — Clears all entries
 
 Global capacity: ``MAX_ARRAYS`` (128). Validates ``size > 0`` on registration.

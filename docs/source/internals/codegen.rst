@@ -76,7 +76,7 @@ Internal function that dispatches to specialized generators based on node type:
        }
    }
 
-**Design:** Uses switch statement for efficient dispatch. Ignores node types that don't directly produce VHDL output (e.g., ``NODE_VAR_DECL`` is handled within statement generation).
+**Design:** Uses a central switch-based dispatcher. Node types that do not directly produce VHDL output are handled in the relevant higher-level generators (for example, ``NODE_VAR_DECL`` is handled within statement generation).
 
 Program Generation
 ------------------

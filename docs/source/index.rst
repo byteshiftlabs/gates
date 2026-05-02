@@ -25,12 +25,12 @@ clocked VHDL for its supported subset, with clock/reset ports, signals, and sync
 Features
 --------
 
-- Recursive-descent parser with full operator precedence (12 levels)
+- Recursive-descent parser with full operator precedence
 - Control flow: ``if/else``, ``while``, ``for``, ``break``, ``continue``
 - Self-contained functions with return value propagation, plus structs with field access and arrays with indexing
 - VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
 - Multi-level error diagnostics with colored output (error/warning/note across 5 categories)
-- 81 unit, integration, structural validation, and edge case tests (GoogleTest)
+- GoogleTest-based unit, integration, structural validation, and edge case coverage
 
 See :doc:`examples` for C-to-VHDL translation samples and :doc:`modules` for the
 complete source code reference.
