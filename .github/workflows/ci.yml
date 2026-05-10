@@ -4,39 +4,126 @@ on:
   push:
     branches:
       - main
-      - '**'
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build-test-docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      BUILD_DIR: build
+      CI_IMAGE: gates-ci
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install dependencies
+      - name: Build Docker image
+        run: docker build -t "$CI_IMAGE" -f Dockerfile .
+
+      - name: Configure in Docker
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cppcheck python3-sphinx python3-sphinx-rtd-theme
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e BUILD_DIR="$BUILD_DIR" \
+            -e HOME=/tmp/gates-home \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            "$CI_IMAGE" \
+            bash -lc '
+              cmake -S . -B "$BUILD_DIR" -DENABLE_TESTING=ON
+            '
 
-      - name: Configure
-        run: cmake -S . -B build -DENABLE_TESTING=ON
+      - name: Build tests in Docker
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e BUILD_DIR="$BUILD_DIR" \
+            -e HOME=/tmp/gates-home \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            "$CI_IMAGE" \
+            bash -lc '
+              cmake --build "$BUILD_DIR" --target gates_tests -j 2
+            '
 
-      - name: Build tests
-        run: cmake --build build --target gates_tests -j 2
+      - name: Run tests in Docker
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e BUILD_DIR="$BUILD_DIR" \
+            -e HOME=/tmp/gates-home \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            "$CI_IMAGE" \
+            bash -lc '
+              ctest --test-dir "$BUILD_DIR" --output-on-failure
+            '
 
-      - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+      - name: Build executable in Docker
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e BUILD_DIR="$BUILD_DIR" \
+            -e HOME=/tmp/gates-home \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            "$CI_IMAGE" \
+            bash -lc '
+              cmake --build "$BUILD_DIR" --target gates -j 2
+            '
 
-      - name: Build executable
-        run: cmake --build build --target gates -j 2
+      - name: Run smoke tests in Docker
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e BUILD_DIR="$BUILD_DIR" \
+            -e HOME=/tmp/gates-home \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            "$CI_IMAGE" \
+            bash -lc '
+              ./$BUILD_DIR/gates --version &&
+              ./$BUILD_DIR/gates examples/example.c /tmp/example.vhdl &&
+              test -s /tmp/example.vhdl
+            '
 
-      - name: Version smoke test
-        run: ./build/gates --version
+      - name: Build docs in Docker
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e BUILD_DIR="$BUILD_DIR" \
+            -e HOME=/tmp/gates-home \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            "$CI_IMAGE" \
+            bash -lc '
+              ./build_docs.sh
+            '
 
-      - name: Build docs
-        run: ./build_docs.sh
+      - name: Run cppcheck in Docker
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e BUILD_DIR="$BUILD_DIR" \
+            -e HOME=/tmp/gates-home \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            "$CI_IMAGE" \
+            bash -lc '
+              cmake --build "$BUILD_DIR" --target cppcheck
+            '
 
-      - name: Run cppcheck
-        run: cmake --build build --target cppcheck
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gates-docs-html
+          path: docs/build/html
+          if-no-files-found: error
