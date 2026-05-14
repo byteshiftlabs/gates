@@ -3,9 +3,7 @@
 set -euo pipefail
 BUILD_DIR="build"
 
-if [ ! -d "$BUILD_DIR" ]; then
-  cmake -S . -B "$BUILD_DIR" -DENABLE_TESTING=ON
-fi
+cmake -S . -B "$BUILD_DIR" -DENABLE_TESTING=ON
 cmake --build "$BUILD_DIR" --target gates_tests -j "${JOBS:-4}"
 # Run discovered tests (gtest_discover_tests creates them at build time)
 ctest --test-dir "$BUILD_DIR" --output-on-failure "$@"
