@@ -23,6 +23,16 @@ For the full local proof bar used by this repository, run:
 ./run_validation.sh
 ```
 
+## Beginner Ramp-Up
+
+If you are new to Gates, use this path:
+
+1. Build the `gates` binary and run `./build/gates --version`.
+2. Translate one curated example from `examples/` before trying your own input files.
+3. Run `./run_tests.sh` once you understand the basic translation path.
+4. Use `./run_validation.sh` as the full public proof bar before you treat a change as release-ready.
+5. Read [ROADMAP.md](ROADMAP.md) after that so you do not confuse supported behavior with planned future work.
+
 ## Example
 
 Given this C input:
@@ -112,6 +122,16 @@ If native and Docker results disagree, the Docker path is the source of truth fo
 ```
 
 `./run_validation.sh` configures the project, runs GoogleTest via CTest, smoke-generates VHDL from the curated positive examples in `examples/`, builds the Sphinx docs, and runs `cppcheck`.
+
+## Building Documentation
+
+Use the convenience wrapper below when you want just the Sphinx HTML output:
+
+```bash
+./build_docs.sh
+```
+
+The script configures `build/` automatically if it does not exist yet, then builds the `docs` CMake target. The authoritative release path is still `./run_validation.sh`, which exercises the docs build together with tests, smoke translation, and static analysis.
 
 ## Docker
 
