@@ -10,10 +10,17 @@ Minimal C subset → VHDL translator
 
 ```bash
 git clone https://github.com/byteshiftlabs/gates.git
-cd gates && mkdir build && cd build
-cmake .. && make
-./gates input.c output.vhdl
-./gates --version
+cd gates
+cmake -S . -B build -DENABLE_TESTING=ON
+cmake --build build --target gates -j"$(nproc)"
+./build/gates input.c output.vhdl
+./build/gates --version
+```
+
+For the full local proof bar used by this repository, run:
+
+```bash
+./run_validation.sh
 ```
 
 ## Example
@@ -85,12 +92,26 @@ Each C function becomes a VHDL entity with clock/reset ports, input parameters a
 - cppcheck 2.13+ — static analysis (`cmake --build build --target cppcheck`)
 - Sphinx + sphinx_rtd_theme — documentation (`./build_docs.sh`)
 
+## Setup Contract
+
+Gates has two public setup paths:
+
+1. Native Ubuntu 24.04 x86_64 development
+  This is the fast local iteration path documented in this README.
+2. Docker-based validation
+  This is the authoritative release gate. GitHub Actions builds the repository Docker image and runs `./run_validation.sh` inside it.
+
+If native and Docker results disagree, the Docker path is the source of truth for release decisions.
+
 ## Testing
 
 ```bash
 ./run_tests.sh    # Build and run all tests
+./run_validation.sh
 ./build_docs.sh   # Build documentation
 ```
+
+`./run_validation.sh` configures the project, runs GoogleTest via CTest, smoke-generates VHDL from the curated positive examples in `examples/`, builds the Sphinx docs, and runs `cppcheck`.
 
 ## Docker
 
@@ -110,12 +131,20 @@ docker build --build-arg RUN_VALIDATION=1 -t gates-validated .
 Inside the container, use the existing project scripts:
 
 ```bash
-cmake -S . -B build -DENABLE_TESTING=ON
-cmake --build build --target gates -j"$(nproc)"
-./run_tests.sh
-./build_docs.sh
-./build/gates examples/example.c output.vhdl
+./run_validation.sh
 ```
+
+## Validation Scope
+
+Current public validation proves:
+
+- unit and integration tests via GoogleTest/CTest
+- structural VHDL validation checks in the test suite
+- smoke translation of the curated positive examples shipped in `examples/`
+- Sphinx documentation build health
+- `cppcheck` static analysis cleanliness
+
+Current public validation does **not** yet include GHDL parsing, vendor synthesis, or timing/resource closure. Structural correctness is the current public contract.
 
 ## Project Structure
 
@@ -139,6 +168,10 @@ examples/      — Sample C input files
 - No `switch/case` or `do-while`
 - Function calls are parsed, but cross-function hardware wiring is not yet synthesized. Multi-function files emit independent entities, so keep hardware-generating examples self-contained.
 - Generated VHDL targets the currently supported C subset. Structural well-formedness is verified by self-contained validation tests (balanced constructs, declared signals, proper type wrapping). Current output does not perform resource sharing, pipelining, or constant folding (see [ROADMAP.md](ROADMAP.md) for planned future work)
+
+## Release Surface
+
+Public releases are source-first. The supported release evidence is the tagged source tree, the CI-built docs artifact, and the Docker validation path above. This repository does not currently promise prebuilt binaries or synthesized hardware artifacts.
 
 ## Documentation
 
