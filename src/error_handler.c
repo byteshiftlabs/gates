@@ -359,7 +359,7 @@ void reset_error_counters(void)
 
 int has_errors(void)
 {
-    return error_count > INVALID_LINE_NUMBER;
+    return error_count > 0;
 }
 
 void set_colored_output(int enable)
