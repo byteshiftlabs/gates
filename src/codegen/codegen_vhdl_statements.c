@@ -76,6 +76,15 @@ void generate_statement_block(ASTNode *node, void (*node_generator)(ASTNode*))
             case NODE_BINARY_OP:
                 emit_expression_as_return(child, node, node_generator);
                 break;
+
+            // A call in return position drives the result port, matching how a
+            // call on the right of an assignment is handled. Cross-function
+            // wiring is still unsynthesised, so the emitted call refers to an
+            // entity rather than a VHDL function; without this case the
+            // statement was dropped and result was left undriven instead.
+            case NODE_FUNC_CALL:
+                emit_expression_as_return(child, node, node_generator);
+                break;
                 
             default:
                 // Intentionally ignored node types
