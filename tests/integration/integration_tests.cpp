@@ -902,3 +902,36 @@ TEST_F(VHDLValidationTest, IntegerLiterals_EmitAsToUnsigned) {
         << "Literal 0 should appear as to_unsigned(0, ...)";
     verifyNoBareLiteralIdentifiers(vhdl);
 }
+
+// -------------------------------------------------------------------
+// Declaration sites used to emit raw identifiers while reference sites
+// went through emit_mapped_signal_name(), so a remapped name was read
+// under one spelling and declared under another (or not at all).
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, ParameterNamedResultDoesNotCollideWithResultPort) {
+    const char *src = "int f(int result) { int b; b = result; return b; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "result : in"), 0u)
+        << "The parameter must not be declared under the result port name";
+    EXPECT_NE(vhdl.find("result_local : in"), std::string::npos)
+        << "The parameter port should carry the remapped name";
+    EXPECT_NE(vhdl.find("result : out"), std::string::npos)
+        << "The generated output port keeps the name result";
+    EXPECT_NE(vhdl.find("b <= result_local;"), std::string::npos)
+        << "The body should read the remapped port";
+}
+
+TEST_F(EndToEndTest, ReservedWordIdentifierIsDeclaredUnderItsMappedName) {
+    const char *src = "int f(int a) { int signal; signal = a; return signal; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal signal"), 0u)
+        << "A VHDL reserved word must not be emitted as a signal name";
+    EXPECT_NE(vhdl.find("signal v_signal :"), std::string::npos)
+        << "The declaration should use the mapped name";
+    EXPECT_NE(vhdl.find("v_signal <= a;"), std::string::npos)
+        << "The write should use the same mapped name";
+}
