@@ -15,6 +15,7 @@ extern "C" {
 #include "symbol_arrays.h"
 #include "symbol_structs.h"
 #include "codegen/codegen_vhdl_helpers.h"
+#include "codegen_vhdl.h"
 }
 #include <cstdio>
 #include <cstring>
@@ -234,4 +235,62 @@ TEST_F(EdgeCaseTest, CommentOnlyInput) {
         EXPECT_EQ(program->type, NODE_PROGRAM);
         free_node(program);
     }
+}
+
+// ==================================================================
+// CODEGEN BUFFER BOUNDS
+// Long array names and index expressions used to overflow the fixed
+// 64-byte codegen buffers (unclamped strncpy + out-of-bounds NUL).
+// ==================================================================
+
+class CodegenBufferBoundsTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        reset_array_table();
+        reset_struct_table();
+        reset_error_counters();
+    }
+
+    void translate(const std::string &c_source) {
+        FILE *fin = tmpfile();
+        ASSERT_NE(fin, nullptr) << "tmpfile() failed";
+        fwrite(c_source.c_str(), 1, c_source.size(), fin);
+        rewind(fin);
+
+        ASTNode *program = parse_program(fin);
+        fclose(fin);
+        if (!program) return;
+
+        FILE *fout = tmpfile();
+        ASSERT_NE(fout, nullptr) << "tmpfile() failed";
+        generate_vhdl(program, fout);
+        fclose(fout);
+        free_node(program);
+    }
+};
+
+TEST_F(CodegenBufferBoundsTest, OverlongArrayIndexIsRejectedNotOverflowed) {
+    // Index text far exceeds the 64-byte codegen buffer.
+    std::string index = "i";
+    for (int n = 0; n < 40; n++) index += " + i";
+    translate("int f(int a) { int i; int arr[4]; i = 0; int x; x = arr[" +
+              index + "]; return x; }");
+    EXPECT_GT(get_error_count(), 0)
+        << "An index expression longer than the buffer must be diagnosed";
+}
+
+TEST_F(CodegenBufferBoundsTest, OverlongArrayNameIsRejectedNotOverflowed) {
+    const std::string name(80, 'b');
+    translate("int f(int a) { int x; int " + name + "[4]; x = " + name +
+              "[0]; return x; }");
+    EXPECT_GT(get_error_count(), 0)
+        << "An array name longer than the buffer must be diagnosed";
+}
+
+TEST_F(CodegenBufferBoundsTest, OverlongArrayNameOnAssignmentIsRejected) {
+    const std::string name(80, 'a');
+    translate("int f(int a) { int " + name + "[4]; " + name +
+              "[0] = 1; return a; }");
+    EXPECT_GT(get_error_count(), 0)
+        << "An array name longer than the buffer must be diagnosed on assignment";
 }
