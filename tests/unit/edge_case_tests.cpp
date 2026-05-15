@@ -235,3 +235,47 @@ TEST_F(EdgeCaseTest, CommentOnlyInput) {
         free_node(program);
     }
 }
+
+// -------------------------------------------------------------------
+// Expression identifiers were silently truncated at 127 characters
+// while parameter lists kept the full name, so two identifiers
+// differing only past that point collapsed into one undeclared signal.
+// -------------------------------------------------------------------
+class LongIdentifierTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        reset_array_table();
+        reset_struct_table();
+        reset_error_counters();
+    }
+
+    bool reportsError(const std::string &src) {
+        FILE *file = tmpfile();
+        EXPECT_NE(file, nullptr);
+        if (!file) return false;
+        fwrite(src.c_str(), 1, src.size(), file);
+        rewind(file);
+        ASTNode *program = parse_program(file);
+        fclose(file);
+        const bool reported = (get_error_count() > 0);
+        if (program) free_node(program);
+        return reported;
+    }
+};
+
+TEST_F(LongIdentifierTest, IdentifiersPastTheLimitAreRejected) {
+    const std::string base(133, 'v');
+    const std::string src =
+        "int f(int " + base + "AAA, int " + base + "BBB) { int r; r = " +
+        base + "AAA + " + base + "BBB; return r; }";
+    EXPECT_TRUE(reportsError(src))
+        << "Two identifiers differing only past the truncation point must not "
+           "collapse silently";
+}
+
+TEST_F(LongIdentifierTest, IdentifiersWithinTheLimitStillParse) {
+    const std::string name(100, 'v');
+    const std::string src =
+        "int f(int " + name + ") { int r; r = " + name + "; return r; }";
+    EXPECT_FALSE(reportsError(src));
+}
