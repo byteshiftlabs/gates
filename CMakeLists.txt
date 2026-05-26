@@ -190,4 +190,16 @@ if(ENABLE_TESTING)
   set_tests_properties(cli_codegen_error_sets_failure_exit_status
     PROPERTIES WILL_FAIL TRUE
   )
+
+  # fopen() succeeds on a directory, so this used to report a successful
+  # compilation and exit 0.
+  add_test(
+    NAME cli_directory_input_is_rejected
+    COMMAND gates
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli
+      ${CMAKE_CURRENT_BINARY_DIR}/directory_input.vhdl
+  )
+  set_tests_properties(cli_directory_input_is_rejected
+    PROPERTIES WILL_FAIL TRUE
+  )
 endif()
