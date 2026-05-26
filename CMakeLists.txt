@@ -178,4 +178,16 @@ if(ENABLE_TESTING)
       COMMENT "Building and running all GoogleTest cases"
     )
   endif()
+
+  # CLI-level tests. The GoogleTest suite links the library directly and never
+  # runs main(), so the exit status contract needs to be checked here.
+  add_test(
+    NAME cli_codegen_error_sets_failure_exit_status
+    COMMAND gates
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/too_many_params.c
+      ${CMAKE_CURRENT_BINARY_DIR}/too_many_params.vhdl
+  )
+  set_tests_properties(cli_codegen_error_sets_failure_exit_status
+    PROPERTIES WILL_FAIL TRUE
+  )
 endif()

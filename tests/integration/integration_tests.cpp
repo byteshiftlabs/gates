@@ -17,6 +17,7 @@ extern "C" {
 #include "error_handler.h"
 #include "symbol_arrays.h"
 #include "symbol_structs.h"
+#include "config.h"
 }
 #include <cstdio>
 #include <cstring>
@@ -527,6 +528,38 @@ TEST_F(NegativeTest, EmptySourceProducesValidOutput) {
     if (program) {
         free_node(program);
     }
+}
+
+TEST_F(NegativeTest, CodegenErrorIsVisibleToCaller) {
+    // A parameter list longer than GATES_MAX_PARAMETERS parses cleanly and only
+    // fails during code generation. The CLI decides its exit status from the
+    // error counter, so codegen has to record the failure there — otherwise a
+    // broken translation is reported as a successful compilation.
+    std::string src = "int f(";
+    for (int i = 0; i < GATES_MAX_PARAMETERS + 1; i++) {
+        if (i > 0) src += ", ";
+        src += "int p" + std::to_string(i);
+    }
+    src += ") { return p0; }";
+
+    FILE *fin = tmpfile();
+    ASSERT_NE(fin, nullptr) << "tmpfile() failed";
+    fwrite(src.c_str(), 1, src.size(), fin);
+    rewind(fin);
+
+    ASTNode *program = parse_program(fin);
+    fclose(fin);
+    ASSERT_NE(program, nullptr) << "Oversized parameter list should still parse";
+    ASSERT_EQ(get_error_count(), 0) << "Failure is expected from codegen, not the parser";
+
+    FILE *fout = tmpfile();
+    ASSERT_NE(fout, nullptr) << "tmpfile() failed";
+    generate_vhdl(program, fout);
+    fclose(fout);
+    free_node(program);
+
+    EXPECT_GT(get_error_count(), 0)
+        << "Exceeding the parameter limit must be recorded as an error";
 }
 
 // ==================================================================
