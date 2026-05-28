@@ -45,7 +45,6 @@ void safe_copy(char *dst, size_t dst_size, const char *src, size_t limit);
 #define PREC_UNKNOWN       -999   // Unknown operator
 
 // Expression parsing precedence bounds
-#define PREC_PARENTHESIZED_MIN  1   // Minimum precedence for parenthesized expressions
 #define PREC_TOP_LEVEL_MIN     -2   // Minimum precedence for top-level expressions
 
 /**
