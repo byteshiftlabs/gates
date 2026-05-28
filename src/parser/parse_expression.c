@@ -269,7 +269,19 @@ static ASTNode* parse_array_access(ParserContext *ctx, const char *identifier_na
 static ASTNode* parse_identifier(ParserContext *ctx)
 {
     char identifier_name[IDENTIFIER_BUFFER_SIZE] = {0};
-    
+
+    // Truncating here used to be silent, so two identifiers differing only past
+    // this length collapsed into one. Parameter lists keep the untruncated
+    // name, so the collapsed reference named a signal that was never declared.
+    if (strlen(ctx->current_token.value) >= sizeof(identifier_name))
+    {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Identifier '%.32s...' exceeds the maximum length of %zu characters",
+                  ctx->current_token.value, sizeof(identifier_name) - 1);
+        advance(ctx);
+        return NULL;
+    }
+
     safe_copy(identifier_name, sizeof(identifier_name), ctx->current_token.value, sizeof(identifier_name) - 1);
     advance(ctx);
     
