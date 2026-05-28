@@ -76,8 +76,10 @@ static ASTNode* parse_unary_minus(ParserContext *ctx)
 static ASTNode* parse_parenthesized_expr(ParserContext *ctx)
 {
     advance(ctx);
-    ASTNode *expr_node = parse_expression_prec(ctx, PREC_PARENTHESIZED_MIN);
-    
+    // Parentheses reset precedence completely: any expression is valid inside
+    // them, including the operators that bind more loosely than bitwise XOR.
+    ASTNode *expr_node = parse_expression_prec(ctx, PREC_TOP_LEVEL_MIN);
+
     if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
         log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                   "Expected ')' after expression");
