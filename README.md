@@ -168,8 +168,8 @@ self-contained.
 - Sphinx docs build health
 - `cppcheck` static analysis cleanliness
 
-It does **not** prove the generated VHDL analyzes, simulates, or synthesizes.
-No GHDL, vendor synthesis, or timing/resource closure runs in CI. The structural
+It does **not** prove the generated VHDL analyzes, simulates, or synthesizes. No
+simulator, vendor synthesis, or timing/resource closure runs in CI. The structural
 checks are self-contained assertions about the emitted text, which is why the
 defects listed above were not caught. Behavioral verification is planned — see
 [ROADMAP.md](ROADMAP.md) Phase 3.
