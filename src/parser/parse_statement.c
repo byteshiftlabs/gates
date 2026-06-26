@@ -134,8 +134,18 @@ static ASTNode* parse_variable_declaration(ParserContext *ctx, Token type_token)
             if (init_expr) {
                 add_child(var_decl_node, init_expr);
             }
-            while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF)) {
-                advance(ctx);
+            // Anything between the initializer and the semicolon used to be
+            // discarded silently. That dropped every declarator after the
+            // first, so "int x = 1, y = 2;" left y referenced but never
+            // declared, and accepted arbitrary trailing garbage.
+            if (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF)) {
+                log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                          "Unexpected '%s' after initializer; only one declarator "
+                          "per declaration is supported",
+                          ctx->current_token.value);
+                while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF)) {
+                    advance(ctx);
+                }
             }
         }
     }
