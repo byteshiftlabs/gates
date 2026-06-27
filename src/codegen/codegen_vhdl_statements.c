@@ -87,8 +87,13 @@ void generate_statement_block(ASTNode *node, void (*node_generator)(ASTNode*))
 // VHDL while loop maps directly from C while
 void generate_while_loop(ASTNode *node, void (*node_generator)(ASTNode*))
 {
+    if (node->num_children == 0)
+    {
+        return;
+    }
+
     ASTNode *condition = node->children[FIRST_CHILD_INDEX];
-    
+
     emit_indented("while ");
     emit_conditional_expression(condition, node_generator);
     emit_raw(" loop\n");
@@ -187,6 +192,11 @@ void generate_for_loop(ASTNode *node, void (*node_generator)(ASTNode*))
 // VHDL if/elsif/else maps closely to C, but requires 'then' and 'end if'
 void generate_if_statement(ASTNode *node, void (*node_generator)(ASTNode*))
 {
+    if (node->num_children == 0)
+    {
+        return;
+    }
+
     ASTNode *condition = node->children[FIRST_CHILD_INDEX];
 
     emit_indented("if ");
@@ -203,8 +213,13 @@ void generate_if_statement(ASTNode *node, void (*node_generator)(ASTNode*))
         
         if (branch->type == NODE_ELSE_IF_STATEMENT)
         {
+            if (branch->num_children == 0)
+            {
+                continue;
+            }
+
             ASTNode *elseif_condition = branch->children[FIRST_CHILD_INDEX];
-            
+
             emit_indent_dec();
             emit_indented("elsif ");
             emit_conditional_expression(elseif_condition, node_generator);

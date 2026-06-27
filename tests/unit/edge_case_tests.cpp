@@ -16,6 +16,7 @@ extern "C" {
 #include "symbol_structs.h"
 #include "codegen/codegen_vhdl_helpers.h"
 #include "config.h"
+#include "codegen_vhdl.h"
 }
 #include <cstdio>
 #include <cstring>
@@ -304,6 +305,60 @@ TEST_F(RecursionDepthTest, LongCommentRunDoesNotExhaustTheStack) {
     for (int i = 0; i < 80000; i++) src += "// c\n";
     src += "int f(int a) { return a; }";
     EXPECT_FALSE(parseReportsError(src));
+}
+
+// ==================================================================
+// EMPTY CONDITIONS
+// `if ()` and `while ()` used to crash: parse_expression returned NULL
+// without logging, so codegen ran on a node with no children.
+// ==================================================================
+
+class EmptyConditionTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        reset_array_table();
+        reset_struct_table();
+        reset_error_counters();
+    }
+
+    // Run the full pipeline, returning true when the source was rejected
+    // without crashing.
+    bool rejects(const char *c_source) {
+        FILE *fin = tmpfile();
+        EXPECT_NE(fin, nullptr);
+        if (!fin) return false;
+        fwrite(c_source, 1, strlen(c_source), fin);
+        rewind(fin);
+
+        ASTNode *program = parse_program(fin);
+        fclose(fin);
+
+        const bool reported = (get_error_count() > 0);
+
+        // Generate anyway: a malformed tree reaching codegen must not crash.
+        if (program) {
+            FILE *fout = tmpfile();
+            EXPECT_NE(fout, nullptr);
+            if (fout) {
+                generate_vhdl(program, fout);
+                fclose(fout);
+            }
+            free_node(program);
+        }
+        return reported;
+    }
+};
+
+TEST_F(EmptyConditionTest, EmptyWhileConditionIsRejected) {
+    EXPECT_TRUE(rejects("int f(int a) { while () { } return a; }"));
+}
+
+TEST_F(EmptyConditionTest, EmptyIfConditionIsRejected) {
+    EXPECT_TRUE(rejects("int f(int a) { if () { } return a; }"));
+}
+
+TEST_F(EmptyConditionTest, EmptyElseIfConditionIsRejected) {
+    EXPECT_TRUE(rejects("int f(int a) { if (a) { } else if () { } return a; }"));
 }
 
 // -------------------------------------------------------------------
