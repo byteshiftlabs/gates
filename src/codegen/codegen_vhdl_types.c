@@ -211,19 +211,11 @@ static void emit_array_signal_declaration(ASTNode *var_decl)
 // -------------------------------------------------------------
 static void emit_simple_signal_declaration(const ASTNode *var_decl)
 {
-    int is_result_variable = (strcmp(var_decl->value, RESERVED_PORT_NAME_RESULT) == 0);
-    
-    if (is_result_variable)
-    {
-        emit_raw("  signal ");
-        emit_raw("%s%s", var_decl->value, SIGNAL_SUFFIX_LOCAL);
-        emit_raw(" : %s;\n", ctype_to_vhdl(var_decl->token.value));
-    }
-    else
-    {
-        emit_raw("  signal %s : %s;\n", 
-                var_decl->value, ctype_to_vhdl(var_decl->token.value));
-    }
+    // Declared through the same mapper the reference sites use, so a name that
+    // is remapped when read is declared under the remapped name too
+    emit_raw("  signal ");
+    emit_mapped_signal_name(var_decl->value);
+    emit_raw(" : %s;\n", ctype_to_vhdl(var_decl->token.value));
 }
 
 // -------------------------------------------------------------
@@ -342,14 +334,10 @@ static void emit_reset_assignment(const ASTNode *var_decl)
         return;
     }
 
-    // Simple signal reset (with reserved name remapping)
-    if (strcmp(var_name, RESERVED_PORT_NAME_RESULT) == 0) {
-        emit_line("%s%s <= %s;", var_name, SIGNAL_SUFFIX_LOCAL,
-                  get_vhdl_default_value(var_decl->token.value));
-    } else {
-        emit_line("%s <= %s;", var_name,
-                  get_vhdl_default_value(var_decl->token.value));
-    }
+    // Reset through the same mapper as the declaration and reference sites
+    emit_indent();
+    emit_mapped_signal_name(var_name);
+    emit_raw(" <= %s;\n", get_vhdl_default_value(var_decl->token.value));
 }
 
 static void emit_reset_assignments_from_subtree(ASTNode *node)
