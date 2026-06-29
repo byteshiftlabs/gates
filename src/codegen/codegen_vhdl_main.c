@@ -184,7 +184,10 @@ static void emit_entity_declaration(const char *function_name,
         int struct_index = find_struct_index(parameter->token.value);
         
         emit_indent();
-        emit_safe_identifier(parameter->value);
+        // Mapped, not merely sanitised: a parameter named "result" would
+        // otherwise collide with the generated result output port, and the
+        // body already refers to it through the mapper
+        emit_mapped_signal_name(parameter->value);
         if (struct_index >= 0) {
             emit_raw(" : in %s_t;\n", parameter->token.value);
         } else {
