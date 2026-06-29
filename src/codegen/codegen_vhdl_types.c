@@ -17,25 +17,41 @@
 // as first-class types in the generated hardware description.
 void emit_all_struct_declarations(void)
 {
+    if (get_struct_count() <= 0)
+    {
+        return;
+    }
+
+    // Record types are wrapped in a package. A VHDL design file may contain
+    // only design units, so bare type declarations at file scope are a syntax
+    // error. A package is also the only placement that makes the types visible
+    // to the entity declarations whose ports reference them.
+    emit_raw("library IEEE;\n");
+    emit_raw("use IEEE.STD_LOGIC_1164.ALL;\n");
+    emit_raw("use IEEE.NUMERIC_STD.ALL;\n\n");
+    emit_raw("package %s is\n", VHDL_TYPES_PACKAGE);
+
     for (int struct_idx = 0; struct_idx < get_struct_count(); ++struct_idx)
     {
         const StructInfo *struct_info = get_struct_info(struct_idx);
         if (!struct_info) {
             continue;
         }
-        
-        emit_raw("-- Struct %s as VHDL record\n", struct_info->name);
-        emit_raw("type %s_t is record\n", struct_info->name);
-        
+
+        emit_raw("  -- Struct %s as VHDL record\n", struct_info->name);
+        emit_raw("  type %s_t is record\n", struct_info->name);
+
         for (int field_index = 0; field_index < struct_info->field_count; ++field_index)
         {
-            emit_raw("  %s : %s;\n", 
-                    struct_info->fields[field_index].field_name, 
+            emit_raw("    %s : %s;\n",
+                    struct_info->fields[field_index].field_name,
                     ctype_to_vhdl(struct_info->fields[field_index].field_type));
         }
-        
-        emit_raw("end record;\n\n");
+
+        emit_raw("  end record;\n");
     }
+
+    emit_raw("end package;\n\n");
 }
 
 // Struct variables become typed signals in VHDL architecture declarations

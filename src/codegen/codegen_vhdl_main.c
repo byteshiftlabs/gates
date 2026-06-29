@@ -161,6 +161,10 @@ static void emit_entity_declaration(const char *function_name,
     emit_line("library IEEE;");
     emit_line("use IEEE.STD_LOGIC_1164.ALL;");
     emit_line("use IEEE.NUMERIC_STD.ALL;");
+    if (get_struct_count() > 0)
+    {
+        emit_line("use work.%s.all;", VHDL_TYPES_PACKAGE);
+    }
     emit_newline();
     emit_line("-- Function: %s", function_name);
     emit_indented("entity ");
