@@ -49,6 +49,7 @@ typedef struct {
     Token current_token;   /**< Most recently read token. */
     int current_line;      /**< Current source line number (1-based). */
     FILE *input;           /**< Source file being parsed. */
+    int depth;             /**< Current expression/statement nesting depth. */
 } ParserContext;
 
 /**
