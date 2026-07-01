@@ -902,3 +902,41 @@ TEST_F(VHDLValidationTest, IntegerLiterals_EmitAsToUnsigned) {
         << "Literal 0 should appear as to_unsigned(0, ...)";
     verifyNoBareLiteralIdentifiers(vhdl);
 }
+
+// -------------------------------------------------------------------
+// The parser encodes struct field access as a__b. The read path decoded
+// that to a.b, but the assignment LHS ran it through the sanitiser
+// (collapsing it to a_b) and emit_typed_operand printed it raw. Both
+// produced references to signals that were never declared.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, StructFieldWriteUsesDottedForm) {
+    const char *src =
+        "struct P { int x; int y; };"
+        "int f(int a) { struct P p; int b; p.x = a; b = p.x; return b; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("p.x <= a;"), std::string::npos)
+        << "The write must target the declared record field";
+    EXPECT_EQ(countOccurrences(vhdl, "p_x"), 0u)
+        << "The flattened name is never declared";
+    EXPECT_EQ(countOccurrences(vhdl, "p__x"), 0u)
+        << "The parser encoding must not reach the output";
+}
+
+TEST_F(EndToEndTest, OperandsAreMappedAndDecoded) {
+    const char *src =
+        "struct P { int x; };"
+        "int f(int a) { int result; struct P p; int y; "
+        "result = result + 1; y = p.x + 1; return y; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("unsigned(result_local)"), std::string::npos)
+        << "A local named result must read the remapped signal, not the out port";
+    EXPECT_EQ(countOccurrences(vhdl, "unsigned(result)"), 0u)
+        << "Reading the result output port is illegal in VHDL-93";
+    EXPECT_NE(vhdl.find("unsigned(p.x)"), std::string::npos)
+        << "Struct field operands must be decoded to dotted form";
+    EXPECT_EQ(countOccurrences(vhdl, "p__x"), 0u);
+}
