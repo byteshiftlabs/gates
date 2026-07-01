@@ -957,6 +957,54 @@ TEST_F(EndToEndTest, CallInReturnPositionDrivesResult) {
 }
 
 // -------------------------------------------------------------------
+// Struct record types used to be emitted at file scope, before any
+// library clause. A VHDL design file may contain only design units, so
+// a bare type declaration there is a syntax error — and entity ports
+// referencing the type could not see it.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, StructTypesAreEmittedInsideAPackage) {
+    const char *src =
+        "struct P { int x; int y; };"
+        "int f(struct P p) { int r; r = p.x; return r; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    const size_t package_pos = vhdl.find("package gates_types is");
+    const size_t type_pos    = vhdl.find("type P_t is record");
+    const size_t endpkg_pos  = vhdl.find("end package;");
+    const size_t entity_pos  = vhdl.find("entity f is");
+
+    ASSERT_NE(package_pos, std::string::npos) << "Record types need a package";
+    ASSERT_NE(type_pos, std::string::npos);
+    ASSERT_NE(endpkg_pos, std::string::npos);
+    ASSERT_NE(entity_pos, std::string::npos);
+
+    EXPECT_LT(package_pos, type_pos) << "The type must sit inside the package";
+    EXPECT_LT(type_pos, endpkg_pos)  << "The type must sit inside the package";
+    EXPECT_LT(endpkg_pos, entity_pos) << "The package must precede the entity";
+
+    // Nothing may precede the first library clause except comments/blank lines
+    const size_t first_library = vhdl.find("library IEEE;");
+    ASSERT_NE(first_library, std::string::npos);
+    EXPECT_LT(first_library, package_pos)
+        << "The package needs its own library context clause";
+
+    EXPECT_NE(vhdl.find("use work.gates_types.all;"), std::string::npos)
+        << "The entity must import the package to see the record type";
+}
+
+TEST_F(EndToEndTest, NoPackageIsEmittedWithoutStructs) {
+    const char *src = "int add(int a, int b) { int sum; sum = a + b; return sum; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(vhdl.find("package gates_types"), std::string::npos)
+        << "An empty types package should not be emitted";
+    EXPECT_EQ(vhdl.find("use work.gates_types.all;"), std::string::npos)
+        << "The use clause should not appear without a package";
+}
+
+// -------------------------------------------------------------------
 // Declaration sites used to emit raw identifiers while reference sites
 // went through emit_mapped_signal_name(), so a remapped name was read
 // under one spelling and declared under another (or not at all).
