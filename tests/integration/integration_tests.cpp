@@ -957,6 +957,44 @@ TEST_F(EndToEndTest, CallInReturnPositionDrivesResult) {
 }
 
 // -------------------------------------------------------------------
+// The parser encodes struct field access as a__b. The read path decoded
+// that to a.b, but the assignment LHS ran it through the sanitiser
+// (collapsing it to a_b) and emit_typed_operand printed it raw. Both
+// produced references to signals that were never declared.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, StructFieldWriteUsesDottedForm) {
+    const char *src =
+        "struct P { int x; int y; };"
+        "int f(int a) { struct P p; int b; p.x = a; b = p.x; return b; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("p.x <= a;"), std::string::npos)
+        << "The write must target the declared record field";
+    EXPECT_EQ(countOccurrences(vhdl, "p_x"), 0u)
+        << "The flattened name is never declared";
+    EXPECT_EQ(countOccurrences(vhdl, "p__x"), 0u)
+        << "The parser encoding must not reach the output";
+}
+
+TEST_F(EndToEndTest, OperandsAreMappedAndDecoded) {
+    const char *src =
+        "struct P { int x; };"
+        "int f(int a) { int result; struct P p; int y; "
+        "result = result + 1; y = p.x + 1; return y; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("unsigned(result_local)"), std::string::npos)
+        << "A local named result must read the remapped signal, not the out port";
+    EXPECT_EQ(countOccurrences(vhdl, "unsigned(result)"), 0u)
+        << "Reading the result output port is illegal in VHDL-93";
+    EXPECT_NE(vhdl.find("unsigned(p.x)"), std::string::npos)
+        << "Struct field operands must be decoded to dotted form";
+    EXPECT_EQ(countOccurrences(vhdl, "p__x"), 0u);
+}
+
+// -------------------------------------------------------------------
 // Struct record types used to be emitted at file scope, before any
 // library clause. A VHDL design file may contain only design units, so
 // a bare type declaration there is a syntax error — and entity ports
