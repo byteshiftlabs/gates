@@ -8,6 +8,8 @@
 #include "codegen_vhdl_constants.h"
 #include "codegen_vhdl_emit.h"
 #include "codegen_vhdl_helpers.h"
+#include "error_handler.h"
+#include "utils.h"
 
 // File-scoped helpers (forward declarations for top-down organization)
 static void emit_array_element_access(const char *array_expression);
@@ -271,20 +273,34 @@ static void emit_array_element_access(const char *array_expression)
     }
 
     char array_name[ARRAY_NAME_BUFFER_SIZE] = {0};
-    int name_length = (int)(left_bracket - array_expression);
-    strncpy(array_name, array_expression, (size_t)name_length);
-    array_name[name_length] = '\0';
-    
+    size_t name_length = (size_t)(left_bracket - array_expression);
+    if (name_length >= sizeof(array_name))
+    {
+        log_error(ERROR_CATEGORY_CODEGEN, 0,
+                  "Array name exceeds %zu characters in '%s'",
+                  sizeof(array_name) - 1, array_expression);
+        emit_raw("-- Array name too long");
+        return;
+    }
+    safe_copy(array_name, sizeof(array_name), array_expression, name_length);
+
     const char *index_start = left_bracket + 1;
     const char *index_end = strchr(index_start, ']');
 
     if (index_end != NULL && index_end > index_start)
     {
         char array_index[ARRAY_INDEX_BUFFER_SIZE] = {0};
-        int index_length = (int)(index_end - index_start);
-        strncpy(array_index, index_start, (size_t)index_length);
-        array_index[index_length] = '\0';
-        
+        size_t index_length = (size_t)(index_end - index_start);
+        if (index_length >= sizeof(array_index))
+        {
+            log_error(ERROR_CATEGORY_CODEGEN, 0,
+                      "Array index expression exceeds %zu characters in '%s'",
+                      sizeof(array_index) - 1, array_expression);
+            emit_raw("-- Array index too long");
+            return;
+        }
+        safe_copy(array_index, sizeof(array_index), index_start, index_length);
+
         emit_raw("%s(%s)", array_name, array_index);
     }
     else
