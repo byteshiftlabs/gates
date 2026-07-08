@@ -165,30 +165,8 @@ void generate_expression(ASTNode *node)
         return;
     }
 
-    // Struct field encoded as a__b -> a.b
-    if (strstr(node->value, "__") != NULL)
-    {
-        char buffer[MAX_BUFFER_SIZE];
-        char *char_ptr = NULL;
-        
-        strncpy(buffer, node->value, sizeof(buffer) - 1);
-        buffer[sizeof(buffer) - 1] = '\0';
-        
-        for (char_ptr = buffer; *char_ptr != '\0'; ++char_ptr)
-        {
-            if (*char_ptr == '_' && *(char_ptr + 1) == '_')
-            {
-                *char_ptr = '.';
-                memmove(char_ptr + 1, char_ptr + 2, strlen(char_ptr + 2) + 1);
-            }
-        }
-        
-        emit_raw("%s", buffer);
-        return;
-    }
-
-    // Use mapped signal name for variables
-    emit_mapped_signal_name(node->value);
+    // Struct fields decoded to dotted form, everything else through the mapper
+    emit_variable_reference(node->value);
 }
 
 // VHDL has no unary operator syntax like C; map ! to boolean test and ~ to bitwise not
