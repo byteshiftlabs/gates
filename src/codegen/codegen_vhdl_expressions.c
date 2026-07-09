@@ -315,7 +315,20 @@ void emit_conditional_expression(ASTNode *condition, void (*node_generator)(ASTN
     }
     else if (condition->type == NODE_EXPRESSION && condition->value != NULL)
     {
-        emit_raw("unsigned(%s) /= 0", condition->value);
+        // Dispatch rather than printing the raw value. Array access needs VHDL
+        // parentheses, not C brackets, and a bare integer literal cannot be
+        // type-converted with unsigned() — numeric_std requires to_unsigned().
+        if (is_numeric_literal(condition->value))
+        {
+            emit_unsigned_cast(condition->value);
+            emit_raw(" /= 0");
+        }
+        else
+        {
+            emit_raw("unsigned(");
+            node_generator(condition);
+            emit_raw(") /= 0");
+        }
     }
     else
     {
