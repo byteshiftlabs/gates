@@ -937,6 +937,26 @@ TEST_F(VHDLValidationTest, IntegerLiterals_EmitAsToUnsigned) {
 }
 
 // -------------------------------------------------------------------
+// A call in return position had no case in the statement dispatch and
+// fell through to default, so the statement vanished and the result
+// port was left undriven with no diagnostic.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, CallInReturnPositionDrivesResult) {
+    const char *src =
+        "int g(int a) { return a; }"
+        "int f(int a) { return g(a); }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    const size_t arch_f = vhdl.find("architecture behavioral of f is");
+    ASSERT_NE(arch_f, std::string::npos);
+    const std::string body_f = vhdl.substr(arch_f);
+
+    EXPECT_NE(body_f.find("result <= g(a);"), std::string::npos)
+        << "The result port must be driven by the returned call";
+}
+
+// -------------------------------------------------------------------
 // Bare-value conditions were printed raw into unsigned(...), so array
 // access kept C bracket syntax and integer literals were wrapped in an
 // illegal type conversion. Neither analyses.
