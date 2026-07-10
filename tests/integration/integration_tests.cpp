@@ -957,6 +957,43 @@ TEST_F(EndToEndTest, CallInReturnPositionDrivesResult) {
 }
 
 // -------------------------------------------------------------------
+// Bare-value conditions were printed raw into unsigned(...), so array
+// access kept C bracket syntax and integer literals were wrapped in an
+// illegal type conversion. Neither analyses.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, ArrayIndexInConditionUsesVhdlParentheses) {
+    const char *src =
+        "int f(int a) { int arr[4]; int r; r = 0; arr[0] = a; "
+        "while (arr[0]) { r = 1; } return r; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("unsigned(arr(0))"), std::string::npos)
+        << "Array access in a condition needs VHDL parentheses";
+    EXPECT_EQ(countOccurrences(vhdl, "arr[0]"), 0u)
+        << "C bracket syntax must not reach the output";
+}
+
+TEST_F(EndToEndTest, LiteralConditionUsesToUnsigned) {
+    // for(;;) synthesises the literal condition "1"
+    const char *src = "int f(int a) { int r; r = 0; for (;;) { r = 1; } return r; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("to_unsigned(1,"), std::string::npos)
+        << "An integer literal condition needs to_unsigned";
+    EXPECT_EQ(countOccurrences(vhdl, "unsigned(1)"), 0u)
+        << "unsigned(<integer literal>) is not a legal numeric_std conversion";
+}
+
+TEST_F(EndToEndTest, PlainVariableConditionIsUnchanged) {
+    const char *src = "int f(int a) { int r; r = 0; while (a) { r = 1; } return r; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+    EXPECT_NE(vhdl.find("unsigned(a) /= 0"), std::string::npos);
+}
+
+// -------------------------------------------------------------------
 // The parser encodes struct field access as a__b. The read path decoded
 // that to a.b, but the assignment LHS ran it through the sanitiser
 // (collapsing it to a_b) and emit_typed_operand printed it raw. Both
