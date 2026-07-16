@@ -17,6 +17,7 @@ extern "C" {
 #include "error_handler.h"
 #include "symbol_arrays.h"
 #include "symbol_structs.h"
+#include "config.h"
 }
 #include <cstdio>
 #include <cstring>
@@ -529,6 +530,38 @@ TEST_F(NegativeTest, EmptySourceProducesValidOutput) {
     }
 }
 
+TEST_F(NegativeTest, CodegenErrorIsVisibleToCaller) {
+    // A parameter list longer than GATES_MAX_PARAMETERS parses cleanly and only
+    // fails during code generation. The CLI decides its exit status from the
+    // error counter, so codegen has to record the failure there — otherwise a
+    // broken translation is reported as a successful compilation.
+    std::string src = "int f(";
+    for (int i = 0; i < GATES_MAX_PARAMETERS + 1; i++) {
+        if (i > 0) src += ", ";
+        src += "int p" + std::to_string(i);
+    }
+    src += ") { return p0; }";
+
+    FILE *fin = tmpfile();
+    ASSERT_NE(fin, nullptr) << "tmpfile() failed";
+    fwrite(src.c_str(), 1, src.size(), fin);
+    rewind(fin);
+
+    ASTNode *program = parse_program(fin);
+    fclose(fin);
+    ASSERT_NE(program, nullptr) << "Oversized parameter list should still parse";
+    ASSERT_EQ(get_error_count(), 0) << "Failure is expected from codegen, not the parser";
+
+    FILE *fout = tmpfile();
+    ASSERT_NE(fout, nullptr) << "tmpfile() failed";
+    generate_vhdl(program, fout);
+    fclose(fout);
+    free_node(program);
+
+    EXPECT_GT(get_error_count(), 0)
+        << "Exceeding the parameter limit must be recorded as an error";
+}
+
 // ==================================================================
 // VHDL VALIDATION TESTS
 // Tests verify generated VHDL has proper structure
@@ -901,4 +934,208 @@ TEST_F(VHDLValidationTest, IntegerLiterals_EmitAsToUnsigned) {
     EXPECT_NE(vhdl.find("to_unsigned(0,"), std::string::npos)
         << "Literal 0 should appear as to_unsigned(0, ...)";
     verifyNoBareLiteralIdentifiers(vhdl);
+}
+
+// -------------------------------------------------------------------
+// A call in return position had no case in the statement dispatch and
+// fell through to default, so the statement vanished and the result
+// port was left undriven with no diagnostic.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, CallInReturnPositionDrivesResult) {
+    const char *src =
+        "int g(int a) { return a; }"
+        "int f(int a) { return g(a); }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    const size_t arch_f = vhdl.find("architecture behavioral of f is");
+    ASSERT_NE(arch_f, std::string::npos);
+    const std::string body_f = vhdl.substr(arch_f);
+
+    EXPECT_NE(body_f.find("result <= g(a);"), std::string::npos)
+        << "The result port must be driven by the returned call";
+}
+
+// -------------------------------------------------------------------
+// Bare-value conditions were printed raw into unsigned(...), so array
+// access kept C bracket syntax and integer literals were wrapped in an
+// illegal type conversion. Neither analyses.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, ArrayIndexInConditionUsesVhdlParentheses) {
+    const char *src =
+        "int f(int a) { int arr[4]; int r; r = 0; arr[0] = a; "
+        "while (arr[0]) { r = 1; } return r; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("unsigned(arr(0))"), std::string::npos)
+        << "Array access in a condition needs VHDL parentheses";
+    EXPECT_EQ(countOccurrences(vhdl, "arr[0]"), 0u)
+        << "C bracket syntax must not reach the output";
+}
+
+TEST_F(EndToEndTest, LiteralConditionUsesToUnsigned) {
+    // for(;;) synthesises the literal condition "1"
+    const char *src = "int f(int a) { int r; r = 0; for (;;) { r = 1; } return r; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("to_unsigned(1,"), std::string::npos)
+        << "An integer literal condition needs to_unsigned";
+    EXPECT_EQ(countOccurrences(vhdl, "unsigned(1)"), 0u)
+        << "unsigned(<integer literal>) is not a legal numeric_std conversion";
+}
+
+TEST_F(EndToEndTest, PlainVariableConditionIsUnchanged) {
+    const char *src = "int f(int a) { int r; r = 0; while (a) { r = 1; } return r; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+    EXPECT_NE(vhdl.find("unsigned(a) /= 0"), std::string::npos);
+}
+
+// -------------------------------------------------------------------
+// The parser encodes struct field access as a__b. The read path decoded
+// that to a.b, but the assignment LHS ran it through the sanitiser
+// (collapsing it to a_b) and emit_typed_operand printed it raw. Both
+// produced references to signals that were never declared.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, StructFieldWriteUsesDottedForm) {
+    const char *src =
+        "struct P { int x; int y; };"
+        "int f(int a) { struct P p; int b; p.x = a; b = p.x; return b; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("p.x <= a;"), std::string::npos)
+        << "The write must target the declared record field";
+    EXPECT_EQ(countOccurrences(vhdl, "p_x"), 0u)
+        << "The flattened name is never declared";
+    EXPECT_EQ(countOccurrences(vhdl, "p__x"), 0u)
+        << "The parser encoding must not reach the output";
+}
+
+TEST_F(EndToEndTest, OperandsAreMappedAndDecoded) {
+    const char *src =
+        "struct P { int x; };"
+        "int f(int a) { int result; struct P p; int y; "
+        "result = result + 1; y = p.x + 1; return y; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_NE(vhdl.find("unsigned(result_local)"), std::string::npos)
+        << "A local named result must read the remapped signal, not the out port";
+    EXPECT_EQ(countOccurrences(vhdl, "unsigned(result)"), 0u)
+        << "Reading the result output port is illegal in VHDL-93";
+    EXPECT_NE(vhdl.find("unsigned(p.x)"), std::string::npos)
+        << "Struct field operands must be decoded to dotted form";
+    EXPECT_EQ(countOccurrences(vhdl, "p__x"), 0u);
+}
+
+// -------------------------------------------------------------------
+// Struct record types used to be emitted at file scope, before any
+// library clause. A VHDL design file may contain only design units, so
+// a bare type declaration there is a syntax error — and entity ports
+// referencing the type could not see it.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, StructTypesAreEmittedInsideAPackage) {
+    const char *src =
+        "struct P { int x; int y; };"
+        "int f(struct P p) { int r; r = p.x; return r; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    const size_t package_pos = vhdl.find("package gates_types is");
+    const size_t type_pos    = vhdl.find("type P_t is record");
+    const size_t endpkg_pos  = vhdl.find("end package;");
+    const size_t entity_pos  = vhdl.find("entity f is");
+
+    ASSERT_NE(package_pos, std::string::npos) << "Record types need a package";
+    ASSERT_NE(type_pos, std::string::npos);
+    ASSERT_NE(endpkg_pos, std::string::npos);
+    ASSERT_NE(entity_pos, std::string::npos);
+
+    EXPECT_LT(package_pos, type_pos) << "The type must sit inside the package";
+    EXPECT_LT(type_pos, endpkg_pos)  << "The type must sit inside the package";
+    EXPECT_LT(endpkg_pos, entity_pos) << "The package must precede the entity";
+
+    // Nothing may precede the first library clause except comments/blank lines
+    const size_t first_library = vhdl.find("library IEEE;");
+    ASSERT_NE(first_library, std::string::npos);
+    EXPECT_LT(first_library, package_pos)
+        << "The package needs its own library context clause";
+
+    EXPECT_NE(vhdl.find("use work.gates_types.all;"), std::string::npos)
+        << "The entity must import the package to see the record type";
+}
+
+TEST_F(EndToEndTest, NoPackageIsEmittedWithoutStructs) {
+    const char *src = "int add(int a, int b) { int sum; sum = a + b; return sum; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(vhdl.find("package gates_types"), std::string::npos)
+        << "An empty types package should not be emitted";
+    EXPECT_EQ(vhdl.find("use work.gates_types.all;"), std::string::npos)
+        << "The use clause should not appear without a package";
+}
+
+// -------------------------------------------------------------------
+// Declaration sites used to emit raw identifiers while reference sites
+// went through emit_mapped_signal_name(), so a remapped name was read
+// under one spelling and declared under another (or not at all).
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, ParameterNamedResultDoesNotCollideWithResultPort) {
+    const char *src = "int f(int result) { int b; b = result; return b; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "result : in"), 0u)
+        << "The parameter must not be declared under the result port name";
+    EXPECT_NE(vhdl.find("result_local : in"), std::string::npos)
+        << "The parameter port should carry the remapped name";
+    EXPECT_NE(vhdl.find("result : out"), std::string::npos)
+        << "The generated output port keeps the name result";
+    EXPECT_NE(vhdl.find("b <= result_local;"), std::string::npos)
+        << "The body should read the remapped port";
+}
+
+TEST_F(EndToEndTest, ReservedWordIdentifierIsDeclaredUnderItsMappedName) {
+    const char *src = "int f(int a) { int signal; signal = a; return signal; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal signal"), 0u)
+        << "A VHDL reserved word must not be emitted as a signal name";
+    EXPECT_NE(vhdl.find("signal v_signal :"), std::string::npos)
+        << "The declaration should use the mapped name";
+    EXPECT_NE(vhdl.find("v_signal <= a;"), std::string::npos)
+        << "The write should use the same mapped name";
+}
+
+// -------------------------------------------------------------------
+// An initialised array used to emit its signal declaration twice: once
+// from emit_array_signal_declaration and again, with the := initialiser
+// attached, from emit_array_initializer_constant. Two declarations of
+// the same name in one declarative region is rejected by any analyser.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, InitialisedArrayDeclaresItsSignalOnce) {
+    const char *src = "int f(int a) { int arr[3] = {1, 2, 3}; return a; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal arr :"), 1u)
+        << "Initialised array must declare its signal exactly once";
+    EXPECT_NE(vhdl.find("constant arr_init"), std::string::npos)
+        << "The initialiser constant should still be emitted";
+    EXPECT_NE(vhdl.find("signal arr : arr_type := arr_init;"), std::string::npos)
+        << "The surviving declaration should carry the initialiser";
+}
+
+TEST_F(EndToEndTest, UninitialisedArrayDeclaresItsSignalOnce) {
+    const char *src = "int f(int a) { int b[3]; b[0] = a; return a; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal b :"), 1u)
+        << "Uninitialised array must still declare its signal exactly once";
 }

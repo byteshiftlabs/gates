@@ -60,6 +60,18 @@ extern "C" {
 #define GATES_MAX_ARRAYS 128
 #endif
 
+/**
+ * Maximum nesting depth for expressions and statements.
+ *
+ * The parser is recursive descent, so input nesting consumes stack. This
+ * bound keeps deeply nested input a diagnostic rather than a crash. It is
+ * far above anything hand-written C reaches and far below the depth that
+ * exhausts a default 8 MB stack.
+ */
+#ifndef GATES_MAX_PARSE_DEPTH
+#define GATES_MAX_PARSE_DEPTH 512
+#endif
+
 // -------------------------------------------------------------
 // Buffer Sizes (internal, generally no need to change)
 // -------------------------------------------------------------
@@ -82,6 +94,10 @@ extern "C" {
 
 #if GATES_MAX_PARAMETERS < 1 || GATES_MAX_PARAMETERS > 1024
 #error "GATES_MAX_PARAMETERS must be between 1 and 1024"
+#endif
+
+#if GATES_MAX_PARSE_DEPTH < 8 || GATES_MAX_PARSE_DEPTH > 100000
+#error "GATES_MAX_PARSE_DEPTH must be between 8 and 100000"
 #endif
 
 #ifdef __cplusplus
