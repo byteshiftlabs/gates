@@ -19,6 +19,7 @@ const char * const VHDL_FALSE = "false";
 const char * const VHDL_PORT_CLK = "clk";
 const char * const VHDL_PORT_RESET = "reset";
 const char * const VHDL_PORT_RESULT = "result";
+const char * const VHDL_TYPES_PACKAGE = "gates_types";
 
 // -------------------------------------------------------------
 // C operator constants
