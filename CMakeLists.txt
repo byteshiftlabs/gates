@@ -15,6 +15,7 @@ set(GATES_VHDL_BIT_WIDTH 32 CACHE STRING "Bit width for VHDL integer types (8-12
 set(GATES_MAX_PARAMETERS 128 CACHE STRING "Maximum function parameters (1-1024)")
 set(GATES_MAX_STRUCTS 64 CACHE STRING "Maximum struct definitions")
 set(GATES_MAX_ARRAYS 128 CACHE STRING "Maximum tracked arrays")
+set(GATES_MAX_STRUCT_FIELDS 32 CACHE STRING "Maximum fields per struct")
 
 # Set C standard
 set(CMAKE_C_STANDARD 11)
@@ -60,6 +61,7 @@ target_compile_definitions(gates_gtest PUBLIC
   GATES_MAX_PARAMETERS=${GATES_MAX_PARAMETERS}
   GATES_MAX_STRUCTS=${GATES_MAX_STRUCTS}
   GATES_MAX_ARRAYS=${GATES_MAX_ARRAYS}
+  GATES_MAX_STRUCT_FIELDS=${GATES_MAX_STRUCT_FIELDS}
 )
 
 add_executable(gates ${GATES_MAIN_SRC})
