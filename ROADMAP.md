@@ -96,8 +96,9 @@ these. Each produces output a VHDL analyzer rejects.
 Behavioral verification is the missing half of the proof bar. The current suite
 checks emitted text, not whether that text analyzes.
 
-- [ ] **VHDL analysis in CI** — run generated output through GHDL. This is the
-      single highest-value addition; it would have caught every Phase 0 codegen defect.
+- [ ] **Behavioural verification of generated VHDL** — route the emitted output through
+      the in-house simulator once that path is ready. This is the single highest-value
+      addition; it would have caught every Phase 0 codegen defect.
 - [ ] Code coverage reporting (gcov/lcov) to find untested paths
 - [ ] Fuzz testing for parser and codegen robustness (AFL or libFuzzer)
 - [ ] Benchmark suite for larger, realistic inputs
