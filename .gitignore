@@ -40,3 +40,5 @@ compile_commands.json
 
 # Clangd
 .cache/
+# Local audit and findings files (never committed)
+*.local.md
