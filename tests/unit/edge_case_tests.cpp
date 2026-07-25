@@ -235,3 +235,59 @@ TEST_F(EdgeCaseTest, CommentOnlyInput) {
         free_node(program);
     }
 }
+
+// -------------------------------------------------------------------
+// Parenthesized expressions must accept every precedence level.
+// Parentheses previously restarted parsing at PREC_PARENTHESIZED_MIN (1),
+// so operators binding more loosely than ^ terminated the subexpression
+// early and the closing paren was then rejected.
+// -------------------------------------------------------------------
+class ParenthesizedPrecedenceTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        reset_array_table();
+        reset_struct_table();
+        reset_error_counters();
+    }
+
+    // Parse a function whose body assigns `expr`, returning true when the
+    // source parsed without any diagnostic.
+    bool parses(const std::string &expr) {
+        const std::string src =
+            "int f(int a, int b) { int r; r = " + expr + "; return r; }";
+        FILE *file = tmpfile();
+        EXPECT_NE(file, nullptr);
+        if (!file) return false;
+        fwrite(src.c_str(), 1, src.size(), file);
+        rewind(file);
+
+        reset_error_counters();
+        ASTNode *program = parse_program(file);
+        fclose(file);
+        const bool ok = (program != NULL) && (get_error_count() == 0);
+        if (program) free_node(program);
+        return ok;
+    }
+};
+
+TEST_F(ParenthesizedPrecedenceTest, AcceptsTightlyBindingOperators) {
+    EXPECT_TRUE(parses("(a * b) + a"));
+    EXPECT_TRUE(parses("(a + b) + a"));
+    EXPECT_TRUE(parses("(a << b) + a"));
+    EXPECT_TRUE(parses("(a < b) + a"));
+    EXPECT_TRUE(parses("(a == b) + a"));
+    EXPECT_TRUE(parses("(a & b) + a"));
+    EXPECT_TRUE(parses("(a ^ b) + a"));
+}
+
+TEST_F(ParenthesizedPrecedenceTest, AcceptsLooselyBindingOperators) {
+    EXPECT_TRUE(parses("(a | b) + a"));
+    EXPECT_TRUE(parses("(a && b) + a"));
+    EXPECT_TRUE(parses("(a || b) + a"));
+}
+
+TEST_F(ParenthesizedPrecedenceTest, AcceptsMixedLogicalGrouping) {
+    EXPECT_TRUE(parses("(a || b) && a"));
+    EXPECT_TRUE(parses("(a && b) || (a | b)"));
+    EXPECT_TRUE(parses("((a || b))"));
+}
