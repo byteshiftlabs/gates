@@ -20,7 +20,10 @@ static ASTNode* parse_for_init(ParserContext *ctx)
 {
     ASTNode *init_node = NULL;
     
+    // Every init path consumes its own separating semicolon, so the caller does
+    // not have to guess whether one is still pending.
     if (match(ctx, TOKEN_SEMICOLON)) {
+        advance(ctx);
         return NULL;
     }
     
@@ -66,8 +69,22 @@ static ASTNode* parse_for_init(ParserContext *ctx)
             }
             init_node = assign_tmp;
         } else {
+            // A bare expression init (for (i; ...)) has no effect in hardware,
+            // but it still has to be consumed. Restoring the position alone left
+            // the identifier as the current token, so the condition parser ate
+            // the init and every later clause shifted by one.
             fseek(ctx->input, saved_pos, SEEK_SET);
             ctx->current_token = saved_token;
+
+            ASTNode *discarded_init = parse_expression(ctx);
+            if (discarded_init) {
+                free_node(discarded_init);
+            }
+            if (!consume(ctx, TOKEN_SEMICOLON)) {
+                log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                          "Expected ';' after for-init expression");
+                return NULL;
+            }
         }
     }
     
@@ -134,11 +151,11 @@ ASTNode* parse_for_statement(ParserContext *ctx)
         return NULL;
     }
     
+    // parse_for_init consumes the init clause's semicolon on every path. The
+    // extra advance that used to live here fired whenever the condition clause
+    // was empty, eating its separator and shifting every later clause.
     ASTNode *init_node = parse_for_init(ctx);
-    
-    if (match(ctx, TOKEN_SEMICOLON)) {
-        advance(ctx);
-    }
+
     
     ASTNode *cond_expr = NULL;
     if (!match(ctx, TOKEN_SEMICOLON)) {

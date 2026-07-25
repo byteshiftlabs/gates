@@ -235,3 +235,48 @@ TEST_F(EdgeCaseTest, CommentOnlyInput) {
         free_node(program);
     }
 }
+
+// -------------------------------------------------------------------
+// for-header clauses desynchronised in two ways: a bare-expression init
+// was backtracked over but never consumed, and the caller advanced past
+// an extra semicolon whenever the condition clause was empty.
+// -------------------------------------------------------------------
+class ForHeaderTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        reset_array_table();
+        reset_struct_table();
+        reset_error_counters();
+    }
+
+    bool parses(const char *loop) {
+        std::string src = "int f(int a) { int i; int r; i = 0; r = 0; ";
+        src += loop;
+        src += " return r; }";
+        FILE *file = tmpfile();
+        EXPECT_NE(file, nullptr);
+        if (!file) return false;
+        fwrite(src.c_str(), 1, src.size(), file);
+        rewind(file);
+        reset_error_counters();
+        ASTNode *program = parse_program(file);
+        fclose(file);
+        const bool ok = (program != NULL) && (get_error_count() == 0);
+        if (program) free_node(program);
+        return ok;
+    }
+};
+
+TEST_F(ForHeaderTest, BareExpressionInitIsConsumed) {
+    EXPECT_TRUE(parses("for (i; i < 4; i = i + 1) { r = r + 1; }"));
+}
+
+TEST_F(ForHeaderTest, EmptyConditionWithNonEmptyInit) {
+    EXPECT_TRUE(parses("for (i; ; i = i + 1) { r = 1; }"));
+    EXPECT_TRUE(parses("for (int j = 0; ; j = j + 1) { r = 1; }"));
+}
+
+TEST_F(ForHeaderTest, ExistingFormsStillParse) {
+    EXPECT_TRUE(parses("for (;;) { r = 1; }"));
+    EXPECT_TRUE(parses("for (int j = 0; j < 4; j++) { r = r + 1; }"));
+}
