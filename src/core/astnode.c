@@ -62,14 +62,18 @@ void add_child(ASTNode *parent, ASTNode *child)
     }
     
     if (parent->num_children >= parent->capacity) {
-        parent->capacity *= CHILDREN_GROWTH_FACTOR;
-        ASTNode **new_children = (ASTNode**)realloc(parent->children, 
-                                             (size_t)parent->capacity * sizeof(ASTNode*));
+        // Capacity is committed only once the reallocation succeeds. Raising it
+        // first left the node claiming space it did not own on failure, so the
+        // next add_child skipped the grow branch and wrote past the old block.
+        int new_capacity = parent->capacity * CHILDREN_GROWTH_FACTOR;
+        ASTNode **new_children = (ASTNode**)realloc(parent->children,
+                                             (size_t)new_capacity * sizeof(ASTNode*));
         if (!new_children) {
             log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to reallocate memory for child nodes");
             return;
         }
         parent->children = new_children;
+        parent->capacity = new_capacity;
     }
     
     parent->children[parent->num_children++] = child;
