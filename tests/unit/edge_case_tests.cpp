@@ -235,3 +235,45 @@ TEST_F(EdgeCaseTest, CommentOnlyInput) {
         free_node(program);
     }
 }
+
+// -------------------------------------------------------------------
+// Content between an initializer and the semicolon used to be discarded
+// silently, so a second declarator vanished and its name was later
+// referenced as an undeclared signal.
+// -------------------------------------------------------------------
+class DeclaratorTailTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        reset_array_table();
+        reset_struct_table();
+        reset_error_counters();
+    }
+
+    bool reportsError(const char *src) {
+        FILE *file = tmpfile();
+        EXPECT_NE(file, nullptr);
+        if (!file) return false;
+        fwrite(src, 1, strlen(src), file);
+        rewind(file);
+        ASTNode *program = parse_program(file);
+        fclose(file);
+        const bool reported = (get_error_count() > 0);
+        if (program) free_node(program);
+        return reported;
+    }
+};
+
+TEST_F(DeclaratorTailTest, SecondDeclaratorIsRejected) {
+    EXPECT_TRUE(reportsError(
+        "int f(int a) { int x = 1, y = 2; int r; r = x + y; return r; }"));
+}
+
+TEST_F(DeclaratorTailTest, GarbageAfterInitializerIsRejected) {
+    EXPECT_TRUE(reportsError(
+        "int f(int a) { int x = 1 this is garbage 42 ; return x; }"));
+}
+
+TEST_F(DeclaratorTailTest, SeparateDeclarationsStillParse) {
+    EXPECT_FALSE(reportsError(
+        "int f(int a) { int x = 1; int y = 2; return x + y; }"));
+}
