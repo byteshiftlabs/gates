@@ -13,16 +13,18 @@ SMOKE_INPUTS=(
 )
 
 cmake -S . -B "$BUILD_DIR" -DENABLE_TESTING=ON
+# The suite includes CLI-level tests that invoke the gates binary, so both
+# targets have to be built before ctest runs.
+cmake --build "$BUILD_DIR" --target gates -j "$JOBS"
 cmake --build "$BUILD_DIR" --target gates_tests -j "$JOBS"
 ctest --test-dir "$BUILD_DIR" --output-on-failure
-cmake --build "$BUILD_DIR" --target gates -j "$JOBS"
 
 rm -rf "$SMOKE_DIR"
 mkdir -p "$SMOKE_DIR"
 
 for input_file in "${SMOKE_INPUTS[@]}"; do
   output_file="${SMOKE_DIR}/$(basename "${input_file%.c}").vhdl"
-  "./${BUILD_DIR}/gates" "$input_file" "$output_file"
+  "${BUILD_DIR}/gates" "$input_file" "$output_file"
   test -s "$output_file"
 done
 

@@ -74,6 +74,15 @@ int main(int argc, char *argv[])
     fclose(fin);
     fclose(fout);
 
+    // Code generation reports diagnostics through the same error handler as the
+    // parser, so the exit status has to be re-checked here. Without this, a
+    // codegen failure is printed and then reported as a successful compilation.
+    if (has_errors()) {
+        log_error(ERROR_CATEGORY_GENERAL, 0,
+                  "Code generation failed with %d error(s)", get_error_count());
+        return EXIT_FAILURE;
+    }
+
     log_info(ERROR_CATEGORY_GENERAL, 0, "Compilation finished successfully.");
     return EXIT_SUCCESS;
 }
