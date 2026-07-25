@@ -6,6 +6,9 @@
 #include "utils.h"
 #include "parse_expression.h"
 #include "symbol_arrays.h"
+#include "config.h"
+
+static ASTNode* parse_expression_prec_inner(ParserContext *ctx, int min_prec);
 
 // Buffer size constants
 #define IDENTIFIER_BUFFER_SIZE 128
@@ -336,7 +339,24 @@ ASTNode* parse_primary(ParserContext *ctx)
     return NULL;
 }
 
+// Depth-guarded entry point. The real body is below; this wrapper is the one
+// place the nesting counter is maintained, so every return path stays balanced.
 ASTNode* parse_expression_prec(ParserContext *ctx, int min_prec)
+{
+    if (ctx->depth >= GATES_MAX_PARSE_DEPTH) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expression nesting exceeds the maximum depth of %d",
+                  GATES_MAX_PARSE_DEPTH);
+        return NULL;
+    }
+
+    ctx->depth++;
+    ASTNode *expr_node = parse_expression_prec_inner(ctx, min_prec);
+    ctx->depth--;
+    return expr_node;
+}
+
+static ASTNode* parse_expression_prec_inner(ParserContext *ctx, int min_prec)
 {
     ASTNode *left_operand = parse_primary(ctx);
     if (!left_operand) {
