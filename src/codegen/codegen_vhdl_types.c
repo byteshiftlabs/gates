@@ -185,19 +185,24 @@ static void emit_array_signal_declaration(ASTNode *var_decl)
     array_element_count -= 1;
     const char *vhdl_element_type = ctype_to_vhdl(var_decl->token.value);
     
-    emit_raw("  type %s_type is array (0 to %d) of %s;\n", 
+    emit_raw("  type %s_type is array (0 to %d) of %s;\n",
             array_name, array_element_count, vhdl_element_type);
-    emit_raw("  signal %s : %s_type;\n", array_name, array_name);
-    
+
     // Check for array initializer
-    int has_initializer = (var_decl->num_children > 0 && 
+    int has_initializer = (var_decl->num_children > 0 &&
                       var_decl->children[FIRST_CHILD_INDEX]->value != NULL &&
                       strcmp(var_decl->children[FIRST_CHILD_INDEX]->value, ARRAY_INIT_MARKER) == 0);
-    
+
+    // Exactly one signal declaration either way: the initializer path emits its
+    // own declaration with the := initialiser attached
     if (has_initializer)
     {
         ASTNode *initializer_list = var_decl->children[FIRST_CHILD_INDEX];
         emit_array_initializer_constant(var_decl, initializer_list, array_name);
+    }
+    else
+    {
+        emit_raw("  signal %s : %s_type;\n", array_name, array_name);
     }
 }
 
