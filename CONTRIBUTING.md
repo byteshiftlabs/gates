@@ -52,7 +52,7 @@ See [docs/source/code_quality.rst](docs/source/code_quality.rst) for detailed co
 ## Building and Testing
 
 ```bash
-./run_validation.sh
+./ci/run_validation.sh
 ```
 
 For quick local iteration when you do not need the full proof bar yet:
@@ -65,7 +65,7 @@ ctest --test-dir build --output-on-failure
 
 Before opening a PR:
 
-1. Run `./run_validation.sh`
+1. Run `./ci/run_validation.sh`
 2. Update `README.md` and `docs/` if the public behavior or setup story changed
 3. Add or update tests and checked-in examples when parser/codegen behavior changes
 4. Update `docs/source/known_issues.rst` if the supported C/VHDL contract changed
