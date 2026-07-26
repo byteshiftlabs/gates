@@ -15,6 +15,7 @@ set(GATES_VHDL_BIT_WIDTH 32 CACHE STRING "Bit width for VHDL integer types (8-12
 set(GATES_MAX_PARAMETERS 128 CACHE STRING "Maximum function parameters (1-1024)")
 set(GATES_MAX_STRUCTS 64 CACHE STRING "Maximum struct definitions")
 set(GATES_MAX_ARRAYS 128 CACHE STRING "Maximum tracked arrays")
+set(GATES_MAX_STRUCT_FIELDS 32 CACHE STRING "Maximum fields per struct")
 
 # Set C standard
 set(CMAKE_C_STANDARD 11)
@@ -60,6 +61,7 @@ target_compile_definitions(gates_gtest PUBLIC
   GATES_MAX_PARAMETERS=${GATES_MAX_PARAMETERS}
   GATES_MAX_STRUCTS=${GATES_MAX_STRUCTS}
   GATES_MAX_ARRAYS=${GATES_MAX_ARRAYS}
+  GATES_MAX_STRUCT_FIELDS=${GATES_MAX_STRUCT_FIELDS}
 )
 
 add_executable(gates ${GATES_MAIN_SRC})
@@ -176,4 +178,28 @@ if(ENABLE_TESTING)
       COMMENT "Building and running all GoogleTest cases"
     )
   endif()
+
+  # CLI-level tests. The GoogleTest suite links the library directly and never
+  # runs main(), so the exit status contract needs to be checked here.
+  add_test(
+    NAME cli_codegen_error_sets_failure_exit_status
+    COMMAND gates
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/too_many_params.c
+      ${CMAKE_CURRENT_BINARY_DIR}/too_many_params.vhdl
+  )
+  set_tests_properties(cli_codegen_error_sets_failure_exit_status
+    PROPERTIES WILL_FAIL TRUE
+  )
+
+  # fopen() succeeds on a directory, so this used to report a successful
+  # compilation and exit 0.
+  add_test(
+    NAME cli_directory_input_is_rejected
+    COMMAND gates
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli
+      ${CMAKE_CURRENT_BINARY_DIR}/directory_input.vhdl
+  )
+  set_tests_properties(cli_directory_input_is_rejected
+    PROPERTIES WILL_FAIL TRUE
+  )
 endif()

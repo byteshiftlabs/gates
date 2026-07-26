@@ -6,9 +6,12 @@
  * @brief Array symbol table for tracking declared arrays and their sizes.
  */
 
-// Table and buffer limits
-#define MAX_ARRAYS        128
-#define ARRAY_NAME_LENGTH  64
+#include "config.h"
+
+// Table and buffer limits. The table size follows the configured
+// GATES_MAX_ARRAYS so the documented -D override actually takes effect.
+#define MAX_ARRAYS        GATES_MAX_ARRAYS
+#define ARRAY_NAME_LENGTH  GATES_ARRAY_NAME_BUFFER_SIZE
 
 #ifdef __cplusplus
 extern "C" {
