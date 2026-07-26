@@ -17,6 +17,7 @@ extern "C" {
 #include "error_handler.h"
 #include "symbol_arrays.h"
 #include "symbol_structs.h"
+#include "config.h"
 }
 #include <cstdio>
 #include <cstring>
@@ -529,6 +530,38 @@ TEST_F(NegativeTest, EmptySourceProducesValidOutput) {
     }
 }
 
+TEST_F(NegativeTest, CodegenErrorIsVisibleToCaller) {
+    // A parameter list longer than GATES_MAX_PARAMETERS parses cleanly and only
+    // fails during code generation. The CLI decides its exit status from the
+    // error counter, so codegen has to record the failure there — otherwise a
+    // broken translation is reported as a successful compilation.
+    std::string src = "int f(";
+    for (int i = 0; i < GATES_MAX_PARAMETERS + 1; i++) {
+        if (i > 0) src += ", ";
+        src += "int p" + std::to_string(i);
+    }
+    src += ") { return p0; }";
+
+    FILE *fin = tmpfile();
+    ASSERT_NE(fin, nullptr) << "tmpfile() failed";
+    fwrite(src.c_str(), 1, src.size(), fin);
+    rewind(fin);
+
+    ASTNode *program = parse_program(fin);
+    fclose(fin);
+    ASSERT_NE(program, nullptr) << "Oversized parameter list should still parse";
+    ASSERT_EQ(get_error_count(), 0) << "Failure is expected from codegen, not the parser";
+
+    FILE *fout = tmpfile();
+    ASSERT_NE(fout, nullptr) << "tmpfile() failed";
+    generate_vhdl(program, fout);
+    fclose(fout);
+    free_node(program);
+
+    EXPECT_GT(get_error_count(), 0)
+        << "Exceeding the parameter limit must be recorded as an error";
+}
+
 // ==================================================================
 // VHDL VALIDATION TESTS
 // Tests verify generated VHDL has proper structure
@@ -938,4 +971,65 @@ TEST_F(EndToEndTest, PlainVariableConditionIsUnchanged) {
     std::string vhdl = translate(src);
     ASSERT_FALSE(vhdl.empty());
     EXPECT_NE(vhdl.find("unsigned(a) /= 0"), std::string::npos);
+}
+
+// -------------------------------------------------------------------
+// Declaration sites used to emit raw identifiers while reference sites
+// went through emit_mapped_signal_name(), so a remapped name was read
+// under one spelling and declared under another (or not at all).
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, ParameterNamedResultDoesNotCollideWithResultPort) {
+    const char *src = "int f(int result) { int b; b = result; return b; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "result : in"), 0u)
+        << "The parameter must not be declared under the result port name";
+    EXPECT_NE(vhdl.find("result_local : in"), std::string::npos)
+        << "The parameter port should carry the remapped name";
+    EXPECT_NE(vhdl.find("result : out"), std::string::npos)
+        << "The generated output port keeps the name result";
+    EXPECT_NE(vhdl.find("b <= result_local;"), std::string::npos)
+        << "The body should read the remapped port";
+}
+
+TEST_F(EndToEndTest, ReservedWordIdentifierIsDeclaredUnderItsMappedName) {
+    const char *src = "int f(int a) { int signal; signal = a; return signal; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal signal"), 0u)
+        << "A VHDL reserved word must not be emitted as a signal name";
+    EXPECT_NE(vhdl.find("signal v_signal :"), std::string::npos)
+        << "The declaration should use the mapped name";
+    EXPECT_NE(vhdl.find("v_signal <= a;"), std::string::npos)
+        << "The write should use the same mapped name";
+}
+
+// -------------------------------------------------------------------
+// An initialised array used to emit its signal declaration twice: once
+// from emit_array_signal_declaration and again, with the := initialiser
+// attached, from emit_array_initializer_constant. Two declarations of
+// the same name in one declarative region is rejected by any analyser.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, InitialisedArrayDeclaresItsSignalOnce) {
+    const char *src = "int f(int a) { int arr[3] = {1, 2, 3}; return a; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal arr :"), 1u)
+        << "Initialised array must declare its signal exactly once";
+    EXPECT_NE(vhdl.find("constant arr_init"), std::string::npos)
+        << "The initialiser constant should still be emitted";
+    EXPECT_NE(vhdl.find("signal arr : arr_type := arr_init;"), std::string::npos)
+        << "The surviving declaration should carry the initialiser";
+}
+
+TEST_F(EndToEndTest, UninitialisedArrayDeclaresItsSignalOnce) {
+    const char *src = "int f(int a) { int b[3]; b[0] = a; return a; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal b :"), 1u)
+        << "Uninitialised array must still declare its signal exactly once";
 }
