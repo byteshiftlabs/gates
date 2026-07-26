@@ -11,6 +11,7 @@
 #include "codegen_vhdl_expressions.h"
 #include "error_handler.h"
 #include "symbol_structs.h"
+#include "utils.h"
 
 // File-scoped helpers (forward declarations for top-down organization)
 static void emit_variable_initializer(ASTNode *declaration,
@@ -76,6 +77,15 @@ void generate_statement_block(ASTNode *node, void (*node_generator)(ASTNode*))
             case NODE_BINARY_OP:
                 emit_expression_as_return(child, node, node_generator);
                 break;
+
+            // A call in return position drives the result port, matching how a
+            // call on the right of an assignment is handled. Cross-function
+            // wiring is still unsynthesised, so the emitted call refers to an
+            // entity rather than a VHDL function; without this case the
+            // statement was dropped and result was left undriven instead.
+            case NODE_FUNC_CALL:
+                emit_expression_as_return(child, node, node_generator);
+                break;
                 
             default:
                 // Intentionally ignored node types
@@ -87,8 +97,13 @@ void generate_statement_block(ASTNode *node, void (*node_generator)(ASTNode*))
 // VHDL while loop maps directly from C while
 void generate_while_loop(ASTNode *node, void (*node_generator)(ASTNode*))
 {
+    if (node->num_children == 0)
+    {
+        return;
+    }
+
     ASTNode *condition = node->children[FIRST_CHILD_INDEX];
-    
+
     emit_indented("while ");
     emit_conditional_expression(condition, node_generator);
     emit_raw(" loop\n");
@@ -187,6 +202,11 @@ void generate_for_loop(ASTNode *node, void (*node_generator)(ASTNode*))
 // VHDL if/elsif/else maps closely to C, but requires 'then' and 'end if'
 void generate_if_statement(ASTNode *node, void (*node_generator)(ASTNode*))
 {
+    if (node->num_children == 0)
+    {
+        return;
+    }
+
     ASTNode *condition = node->children[FIRST_CHILD_INDEX];
 
     emit_indented("if ");
@@ -203,8 +223,13 @@ void generate_if_statement(ASTNode *node, void (*node_generator)(ASTNode*))
         
         if (branch->type == NODE_ELSE_IF_STATEMENT)
         {
+            if (branch->num_children == 0)
+            {
+                continue;
+            }
+
             ASTNode *elseif_condition = branch->children[FIRST_CHILD_INDEX];
-            
+
             emit_indent_dec();
             emit_indented("elsif ");
             emit_conditional_expression(elseif_condition, node_generator);
@@ -286,18 +311,30 @@ static void emit_array_element_assignment(const ASTNode *left_hand_side,
     }
 
     char array_name[ARRAY_NAME_BUFFER_SIZE] = {0};
-    int name_length = (int)(left_bracket - left_hand_side->value);
-    strncpy(array_name, left_hand_side->value, (size_t)name_length);
-    array_name[name_length] = '\0';
+    size_t name_length = (size_t)(left_bracket - left_hand_side->value);
+    if (name_length >= sizeof(array_name)) {
+        log_error(ERROR_CATEGORY_CODEGEN, 0,
+                  "Array name exceeds %zu characters in assignment to '%s'",
+                  sizeof(array_name) - 1, left_hand_side->value);
+        emit_raw("-- Array name too long\n");
+        return;
+    }
+    safe_copy(array_name, sizeof(array_name), left_hand_side->value, name_length);
 
     const char *index_start = left_bracket + 1;
     const char *index_end = strchr(index_start, ']');
 
     if (index_end != NULL && index_end > index_start) {
         char array_index[ARRAY_INDEX_BUFFER_SIZE] = {0};
-        int index_length = (int)(index_end - index_start);
-        strncpy(array_index, index_start, (size_t)index_length);
-        array_index[index_length] = '\0';
+        size_t index_length = (size_t)(index_end - index_start);
+        if (index_length >= sizeof(array_index)) {
+            log_error(ERROR_CATEGORY_CODEGEN, 0,
+                      "Array index expression exceeds %zu characters in assignment to '%s'",
+                      sizeof(array_index) - 1, left_hand_side->value);
+            emit_raw("-- Array index too long\n");
+            return;
+        }
+        safe_copy(array_index, sizeof(array_index), index_start, index_length);
 
         emit_raw("%s(%s) <= ", array_name, array_index);
         node_generator(right_hand_side);
@@ -326,7 +363,9 @@ static void emit_variable_assignment(ASTNode *assignment,
         return;
     }
 
-    emit_mapped_signal_name(left_hand_side->value);
+    // Reference, not merely mapped: a struct field LHS is encoded as a__b and
+    // the sanitiser would otherwise collapse it to a_b, which is never declared
+    emit_variable_reference(left_hand_side->value);
     emit_raw(" <= ");
     node_generator(right_hand_side);
     emit_raw(";\n");

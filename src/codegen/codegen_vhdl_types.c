@@ -17,25 +17,41 @@
 // as first-class types in the generated hardware description.
 void emit_all_struct_declarations(void)
 {
+    if (get_struct_count() <= 0)
+    {
+        return;
+    }
+
+    // Record types are wrapped in a package. A VHDL design file may contain
+    // only design units, so bare type declarations at file scope are a syntax
+    // error. A package is also the only placement that makes the types visible
+    // to the entity declarations whose ports reference them.
+    emit_raw("library IEEE;\n");
+    emit_raw("use IEEE.STD_LOGIC_1164.ALL;\n");
+    emit_raw("use IEEE.NUMERIC_STD.ALL;\n\n");
+    emit_raw("package %s is\n", VHDL_TYPES_PACKAGE);
+
     for (int struct_idx = 0; struct_idx < get_struct_count(); ++struct_idx)
     {
         const StructInfo *struct_info = get_struct_info(struct_idx);
         if (!struct_info) {
             continue;
         }
-        
-        emit_raw("-- Struct %s as VHDL record\n", struct_info->name);
-        emit_raw("type %s_t is record\n", struct_info->name);
-        
+
+        emit_raw("  -- Struct %s as VHDL record\n", struct_info->name);
+        emit_raw("  type %s_t is record\n", struct_info->name);
+
         for (int field_index = 0; field_index < struct_info->field_count; ++field_index)
         {
-            emit_raw("  %s : %s;\n", 
-                    struct_info->fields[field_index].field_name, 
+            emit_raw("    %s : %s;\n",
+                    struct_info->fields[field_index].field_name,
                     ctype_to_vhdl(struct_info->fields[field_index].field_type));
         }
-        
-        emit_raw("end record;\n\n");
+
+        emit_raw("  end record;\n");
     }
+
+    emit_raw("end package;\n\n");
 }
 
 // Struct variables become typed signals in VHDL architecture declarations
@@ -185,19 +201,24 @@ static void emit_array_signal_declaration(ASTNode *var_decl)
     array_element_count -= 1;
     const char *vhdl_element_type = ctype_to_vhdl(var_decl->token.value);
     
-    emit_raw("  type %s_type is array (0 to %d) of %s;\n", 
+    emit_raw("  type %s_type is array (0 to %d) of %s;\n",
             array_name, array_element_count, vhdl_element_type);
-    emit_raw("  signal %s : %s_type;\n", array_name, array_name);
-    
+
     // Check for array initializer
-    int has_initializer = (var_decl->num_children > 0 && 
+    int has_initializer = (var_decl->num_children > 0 &&
                       var_decl->children[FIRST_CHILD_INDEX]->value != NULL &&
                       strcmp(var_decl->children[FIRST_CHILD_INDEX]->value, ARRAY_INIT_MARKER) == 0);
-    
+
+    // Exactly one signal declaration either way: the initializer path emits its
+    // own declaration with the := initialiser attached
     if (has_initializer)
     {
         ASTNode *initializer_list = var_decl->children[FIRST_CHILD_INDEX];
         emit_array_initializer_constant(var_decl, initializer_list, array_name);
+    }
+    else
+    {
+        emit_raw("  signal %s : %s_type;\n", array_name, array_name);
     }
 }
 
@@ -206,19 +227,11 @@ static void emit_array_signal_declaration(ASTNode *var_decl)
 // -------------------------------------------------------------
 static void emit_simple_signal_declaration(const ASTNode *var_decl)
 {
-    int is_result_variable = (strcmp(var_decl->value, RESERVED_PORT_NAME_RESULT) == 0);
-    
-    if (is_result_variable)
-    {
-        emit_raw("  signal ");
-        emit_raw("%s%s", var_decl->value, SIGNAL_SUFFIX_LOCAL);
-        emit_raw(" : %s;\n", ctype_to_vhdl(var_decl->token.value));
-    }
-    else
-    {
-        emit_raw("  signal %s : %s;\n", 
-                var_decl->value, ctype_to_vhdl(var_decl->token.value));
-    }
+    // Declared through the same mapper the reference sites use, so a name that
+    // is remapped when read is declared under the remapped name too
+    emit_raw("  signal ");
+    emit_mapped_signal_name(var_decl->value);
+    emit_raw(" : %s;\n", ctype_to_vhdl(var_decl->token.value));
 }
 
 // -------------------------------------------------------------
@@ -337,14 +350,10 @@ static void emit_reset_assignment(const ASTNode *var_decl)
         return;
     }
 
-    // Simple signal reset (with reserved name remapping)
-    if (strcmp(var_name, RESERVED_PORT_NAME_RESULT) == 0) {
-        emit_line("%s%s <= %s;", var_name, SIGNAL_SUFFIX_LOCAL,
-                  get_vhdl_default_value(var_decl->token.value));
-    } else {
-        emit_line("%s <= %s;", var_name,
-                  get_vhdl_default_value(var_decl->token.value));
-    }
+    // Reset through the same mapper as the declaration and reference sites
+    emit_indent();
+    emit_mapped_signal_name(var_name);
+    emit_raw(" <= %s;\n", get_vhdl_default_value(var_decl->token.value));
 }
 
 static void emit_reset_assignments_from_subtree(ASTNode *node)

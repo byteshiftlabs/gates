@@ -19,6 +19,17 @@ extern "C" {
 void emit_mapped_signal_name(const char *variable_name);
 
 /**
+ * @brief Emit a variable reference.
+ *
+ * Struct field access is encoded by the parser as a__b and must be emitted as
+ * VHDL's a.b; every other name goes through the signal name mapper. Use this
+ * wherever a variable is referenced so declaration and reference sites agree.
+ *
+ * @param variable_name Identifier as stored in the AST.
+ */
+void emit_variable_reference(const char *variable_name);
+
+/**
  * Emit a sanitized VHDL identifier via the emitter.
  * If the name is already valid VHDL, emits directly.
  * Otherwise, sanitizes to ensure VHDL compliance.

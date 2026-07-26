@@ -221,6 +221,41 @@ void emit_signed_cast(const char *value)
 
 // Literals use to_unsigned/to_signed; variable references use unsigned()/signed()
 // wrapping because they're already std_logic_vector signals.
+// Struct field access is encoded as a__b by the parser; VHDL needs a.b.
+// Everything else goes through the signal name mapper, so that references
+// match the names used at the declaration sites.
+void emit_variable_reference(const char *variable_name)
+{
+    if (variable_name == NULL)
+    {
+        emit_raw("%s", UNKNOWN_IDENTIFIER);
+        return;
+    }
+
+    if (strstr(variable_name, "__") != NULL)
+    {
+        char buffer[MAX_BUFFER_SIZE];
+        char *char_ptr = NULL;
+
+        strncpy(buffer, variable_name, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+
+        for (char_ptr = buffer; *char_ptr != '\0'; ++char_ptr)
+        {
+            if (*char_ptr == '_' && *(char_ptr + 1) == '_')
+            {
+                *char_ptr = '.';
+                memmove(char_ptr + 1, char_ptr + 2, strlen(char_ptr + 2) + 1);
+            }
+        }
+
+        emit_raw("%s", buffer);
+        return;
+    }
+
+    emit_mapped_signal_name(variable_name);
+}
+
 void emit_typed_operand(ASTNode *operand, int is_signed, void (*node_generator)(ASTNode*))
 {
     if (operand == NULL)
@@ -249,9 +284,11 @@ void emit_typed_operand(ASTNode *operand, int is_signed, void (*node_generator)(
         }
         else
         {
-            // Variable or expression - wrap in unsigned/signed cast
+            // Variable or expression - wrap in unsigned/signed cast.
+            // Routed through emit_variable_reference so struct fields are
+            // decoded and remapped names match their declarations.
             emit_raw("%s(", is_signed ? "signed" : "unsigned");
-            emit_raw("%s", operand->value);
+            emit_variable_reference(operand->value);
             emit_raw(")");
         }
     }
