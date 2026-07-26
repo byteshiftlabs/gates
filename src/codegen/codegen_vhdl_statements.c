@@ -363,7 +363,9 @@ static void emit_variable_assignment(ASTNode *assignment,
         return;
     }
 
-    emit_mapped_signal_name(left_hand_side->value);
+    // Reference, not merely mapped: a struct field LHS is encoded as a__b and
+    // the sanitiser would otherwise collapse it to a_b, which is never declared
+    emit_variable_reference(left_hand_side->value);
     emit_raw(" <= ");
     node_generator(right_hand_side);
     emit_raw(";\n");
