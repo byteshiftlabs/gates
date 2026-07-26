@@ -15,6 +15,7 @@ extern "C" {
 #include "symbol_arrays.h"
 #include "symbol_structs.h"
 #include "codegen/codegen_vhdl_helpers.h"
+#include "config.h"
 #include "codegen_vhdl.h"
 }
 #include <cstdio>
@@ -235,6 +236,75 @@ TEST_F(EdgeCaseTest, CommentOnlyInput) {
         EXPECT_EQ(program->type, NODE_PROGRAM);
         free_node(program);
     }
+}
+
+// ==================================================================
+// RECURSION DEPTH
+// The parser is recursive descent and the lexer recursed once per
+// comment, so nested or comment-heavy input exhausted the stack.
+// Sizes below are chosen to exceed the depth that used to segfault.
+// ==================================================================
+
+class RecursionDepthTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        reset_array_table();
+        reset_struct_table();
+        reset_error_counters();
+    }
+
+    // Parse without crashing; returns true when the parser reported an error.
+    bool parseReportsError(const std::string &src) {
+        FILE *file = tmpfile();
+        EXPECT_NE(file, nullptr);
+        if (!file) return false;
+        fwrite(src.c_str(), 1, src.size(), file);
+        rewind(file);
+
+        ASTNode *program = parse_program(file);
+        fclose(file);
+        const bool reported = (get_error_count() > 0);
+        if (program) free_node(program);
+        return reported;
+    }
+};
+
+TEST_F(RecursionDepthTest, DeeplyNestedParenthesesAreRejected) {
+    const int depth = GATES_MAX_PARSE_DEPTH * 100;
+    std::string src = "int f(int a) { int x; x = ";
+    src.append(static_cast<size_t>(depth), '(');
+    src += "a";
+    src.append(static_cast<size_t>(depth), ')');
+    src += "; return x; }";
+    EXPECT_TRUE(parseReportsError(src));
+}
+
+TEST_F(RecursionDepthTest, DeeplyNestedStatementsAreRejected) {
+    const int depth = GATES_MAX_PARSE_DEPTH * 50;
+    std::string src = "int f(int a) { int r; r = 0; ";
+    for (int i = 0; i < depth; i++) src += "if (a) { ";
+    src += "r = 1; ";
+    for (int i = 0; i < depth; i++) src += "} ";
+    src += "return r; }";
+    EXPECT_TRUE(parseReportsError(src));
+}
+
+TEST_F(RecursionDepthTest, NestingWithinTheLimitStillParses) {
+    const int depth = GATES_MAX_PARSE_DEPTH / 2;
+    std::string src = "int f(int a) { int x; x = ";
+    src.append(static_cast<size_t>(depth), '(');
+    src += "a";
+    src.append(static_cast<size_t>(depth), ')');
+    src += "; return x; }";
+    EXPECT_FALSE(parseReportsError(src));
+}
+
+TEST_F(RecursionDepthTest, LongCommentRunDoesNotExhaustTheStack) {
+    // The lexer used to consume one stack frame per skipped comment.
+    std::string src;
+    for (int i = 0; i < 80000; i++) src += "// c\n";
+    src += "int f(int a) { return a; }";
+    EXPECT_FALSE(parseReportsError(src));
 }
 
 // ==================================================================
