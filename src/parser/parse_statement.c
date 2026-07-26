@@ -256,6 +256,7 @@ static ASTNode* parse_standalone_function_call(ParserContext *ctx, const char *f
     {
         log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                   "Expected ';' after function call");
+        free_node(func_call_node);
         return NULL;
     }
     
@@ -302,6 +303,7 @@ static ASTNode* parse_assignment_or_expression(ParserContext *ctx)
         {
             log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                       "Expected ';' after assignment");
+            free_node(assign_node);
             return NULL;
         }
         
@@ -338,6 +340,7 @@ static ASTNode* parse_return_statement(ParserContext *ctx)
     if (!consume(ctx, TOKEN_SEMICOLON)) {
         log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                   "Expected ';' after return statement");
+        free_node(stmt_node);
         return NULL;
     }
     
