@@ -65,7 +65,7 @@ The compiler uses global state in several modules to keep the current single-fil
 
 - ``error_count``, ``warning_count``: Track diagnostic counts per compilation.
 - **Rationale**: Avoids passing context through every function call in the parser and codegen. The compiler processes one file at a time in a single-threaded pipeline.
-- **Reset**: Call ``reset_error_state()`` between compilations if embedding in a tool.
+- **Reset**: Call ``reset_error_counters()`` between compilations if embedding in a tool.
 
 **Symbol Tables** (``symbol_structs.c``, ``symbol_arrays.c``):
 
@@ -75,4 +75,24 @@ The compiler uses global state in several modules to keep the current single-fil
 - **Reset**: Call ``reset_struct_table()`` and ``reset_array_table()`` between compilations.
 
 **Future Consideration**: If multi-threaded compilation is needed, these modules should be refactored to use a context struct passed through the call chain.
+
+Out-of-Memory Handling
+-----------------------
+
+``safe_strdup()`` (``utils.c``) and ``create_node()`` (``astnode.c``) call
+``exit(EXIT_FAILURE)`` if ``malloc``/``strdup`` fails, rather than returning
+NULL to the caller.
+
+- **Rationale**: Gates builds a single executable (see ``CMakeLists.txt``) —
+  it is not installed as a library and exposes no public API for another
+  process to link against. For a single-shot CLI compiler, terminating on an
+  unrecoverable allocation failure is standard practice (the same approach
+  GCC and Git take with their internal ``xmalloc`` helpers), and it avoids
+  threading a NULL-check-and-propagate path through every one of the parser's
+  25+ call sites, none of which currently check allocation results.
+- **Consequence**: Gates cannot be safely embedded as a library in a
+  long-running process (e.g. a language server) without wrapping allocation
+  first. If that use case arises, revisit this decision — it would require
+  converting both functions to return NULL and propagating the failure through
+  every caller.
 
