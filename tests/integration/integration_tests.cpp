@@ -17,6 +17,7 @@ extern "C" {
 #include "error_handler.h"
 #include "symbol_arrays.h"
 #include "symbol_structs.h"
+#include "config.h"
 }
 #include <cstdio>
 #include <cstring>
@@ -529,6 +530,38 @@ TEST_F(NegativeTest, EmptySourceProducesValidOutput) {
     }
 }
 
+TEST_F(NegativeTest, CodegenErrorIsVisibleToCaller) {
+    // A parameter list longer than GATES_MAX_PARAMETERS parses cleanly and only
+    // fails during code generation. The CLI decides its exit status from the
+    // error counter, so codegen has to record the failure there — otherwise a
+    // broken translation is reported as a successful compilation.
+    std::string src = "int f(";
+    for (int i = 0; i < GATES_MAX_PARAMETERS + 1; i++) {
+        if (i > 0) src += ", ";
+        src += "int p" + std::to_string(i);
+    }
+    src += ") { return p0; }";
+
+    FILE *fin = tmpfile();
+    ASSERT_NE(fin, nullptr) << "tmpfile() failed";
+    fwrite(src.c_str(), 1, src.size(), fin);
+    rewind(fin);
+
+    ASTNode *program = parse_program(fin);
+    fclose(fin);
+    ASSERT_NE(program, nullptr) << "Oversized parameter list should still parse";
+    ASSERT_EQ(get_error_count(), 0) << "Failure is expected from codegen, not the parser";
+
+    FILE *fout = tmpfile();
+    ASSERT_NE(fout, nullptr) << "tmpfile() failed";
+    generate_vhdl(program, fout);
+    fclose(fout);
+    free_node(program);
+
+    EXPECT_GT(get_error_count(), 0)
+        << "Exceeding the parameter limit must be recorded as an error";
+}
+
 // ==================================================================
 // VHDL VALIDATION TESTS
 // Tests verify generated VHDL has proper structure
@@ -949,4 +982,32 @@ TEST_F(EndToEndTest, NoPackageIsEmittedWithoutStructs) {
         << "An empty types package should not be emitted";
     EXPECT_EQ(vhdl.find("use work.gates_types.all;"), std::string::npos)
         << "The use clause should not appear without a package";
+}
+
+// -------------------------------------------------------------------
+// An initialised array used to emit its signal declaration twice: once
+// from emit_array_signal_declaration and again, with the := initialiser
+// attached, from emit_array_initializer_constant. Two declarations of
+// the same name in one declarative region is rejected by any analyser.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, InitialisedArrayDeclaresItsSignalOnce) {
+    const char *src = "int f(int a) { int arr[3] = {1, 2, 3}; return a; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal arr :"), 1u)
+        << "Initialised array must declare its signal exactly once";
+    EXPECT_NE(vhdl.find("constant arr_init"), std::string::npos)
+        << "The initialiser constant should still be emitted";
+    EXPECT_NE(vhdl.find("signal arr : arr_type := arr_init;"), std::string::npos)
+        << "The surviving declaration should carry the initialiser";
+}
+
+TEST_F(EndToEndTest, UninitialisedArrayDeclaresItsSignalOnce) {
+    const char *src = "int f(int a) { int b[3]; b[0] = a; return a; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal b :"), 1u)
+        << "Uninitialised array must still declare its signal exactly once";
 }
