@@ -51,6 +51,10 @@ extern const char * const VHDL_PORT_CLK;
 extern const char * const VHDL_PORT_RESET;
 extern const char * const VHDL_PORT_RESULT;
 
+// Package holding generated record types, so struct types are visible to the
+// entity declarations whose ports reference them
+extern const char * const VHDL_TYPES_PACKAGE;
+
 // -------------------------------------------------------------
 // C operator constants
 // -------------------------------------------------------------

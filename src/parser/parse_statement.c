@@ -9,6 +9,9 @@
 #include "utils.h"
 #include "error_handler.h"
 #include "tokenizer.h"
+#include "config.h"
+
+static ASTNode* parse_statement_inner(ParserContext *ctx);
 
 // Constants
 #define ARRAY_SIZE_BUFFER_SIZE 256
@@ -131,8 +134,18 @@ static ASTNode* parse_variable_declaration(ParserContext *ctx, Token type_token)
             if (init_expr) {
                 add_child(var_decl_node, init_expr);
             }
-            while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF)) {
-                advance(ctx);
+            // Anything between the initializer and the semicolon used to be
+            // discarded silently. That dropped every declarator after the
+            // first, so "int x = 1, y = 2;" left y referenced but never
+            // declared, and accepted arbitrary trailing garbage.
+            if (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF)) {
+                log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                          "Unexpected '%s' after initializer; only one declarator "
+                          "per declaration is supported",
+                          ctx->current_token.value);
+                while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF)) {
+                    advance(ctx);
+                }
             }
         }
     }
@@ -334,7 +347,24 @@ static ASTNode* parse_return_statement(ParserContext *ctx)
     return stmt_node;
 }
 
+// Depth-guarded entry point. The real body is below; this wrapper is the one
+// place the nesting counter is maintained, so every return path stays balanced.
 ASTNode* parse_statement(ParserContext *ctx)
+{
+    if (ctx->depth >= GATES_MAX_PARSE_DEPTH) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Statement nesting exceeds the maximum depth of %d",
+                  GATES_MAX_PARSE_DEPTH);
+        return NULL;
+    }
+
+    ctx->depth++;
+    ASTNode *stmt = parse_statement_inner(ctx);
+    ctx->depth--;
+    return stmt;
+}
+
+static ASTNode* parse_statement_inner(ParserContext *ctx)
 {
     ASTNode *stmt_node = create_node(NODE_STATEMENT);
     
