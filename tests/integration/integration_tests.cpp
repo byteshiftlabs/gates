@@ -935,3 +935,31 @@ TEST_F(VHDLValidationTest, IntegerLiterals_EmitAsToUnsigned) {
         << "Literal 0 should appear as to_unsigned(0, ...)";
     verifyNoBareLiteralIdentifiers(vhdl);
 }
+
+// -------------------------------------------------------------------
+// An initialised array used to emit its signal declaration twice: once
+// from emit_array_signal_declaration and again, with the := initialiser
+// attached, from emit_array_initializer_constant. Two declarations of
+// the same name in one declarative region is rejected by any analyser.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, InitialisedArrayDeclaresItsSignalOnce) {
+    const char *src = "int f(int a) { int arr[3] = {1, 2, 3}; return a; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal arr :"), 1u)
+        << "Initialised array must declare its signal exactly once";
+    EXPECT_NE(vhdl.find("constant arr_init"), std::string::npos)
+        << "The initialiser constant should still be emitted";
+    EXPECT_NE(vhdl.find("signal arr : arr_type := arr_init;"), std::string::npos)
+        << "The surviving declaration should carry the initialiser";
+}
+
+TEST_F(EndToEndTest, UninitialisedArrayDeclaresItsSignalOnce) {
+    const char *src = "int f(int a) { int b[3]; b[0] = a; return a; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+
+    EXPECT_EQ(countOccurrences(vhdl, "signal b :"), 1u)
+        << "Uninitialised array must still declare its signal exactly once";
+}
