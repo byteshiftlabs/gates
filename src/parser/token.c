@@ -236,45 +236,51 @@ static void build_operator_token(Token *token, int first, int second, FILE *inpu
 Token get_next_token(ParserContext *ctx)
 {
     FILE *input = ctx->input;
-    Token token = {0};
 
-    int current_char = skip_whitespace(ctx);
-    token.line = ctx->current_line;
+    // Skipped comments continue the loop rather than recursing: a run of
+    // comments would otherwise cost one stack frame each and overflow the
+    // stack on comment-heavy input
+    for (;;) {
+        Token token = {0};
 
-    if (current_char == EOF) {
-        token.type = TOKEN_EOF;
-        return token;
-    }
+        int current_char = skip_whitespace(ctx);
+        token.line = ctx->current_line;
 
-    // Comments or division operator
-    if (current_char == '/') {
-        int lookahead = fgetc(input);
-        if (skip_comment_or_division(ctx, lookahead, &token)) {
-            return get_next_token(ctx);
+        if (current_char == EOF) {
+            token.type = TOKEN_EOF;
+            return token;
         }
+
+        // Comments or division operator
+        if (current_char == '/') {
+            int comment_lookahead = fgetc(input);
+            if (skip_comment_or_division(ctx, comment_lookahead, &token)) {
+                continue;
+            }
+            return token;
+        }
+
+        if (isalpha(current_char) || current_char == '_') {
+            return lex_identifier_or_keyword(ctx, current_char);
+        }
+
+        if (isdigit(current_char)) {
+            return lex_number(ctx, current_char);
+        }
+
+        // Punctuation (single-char delimiters)
+        int punct_type = classify_punctuation(current_char);
+        if (punct_type >= 0) {
+            token.type = (TokenType)punct_type;
+            token.value[0] = (char)current_char;
+            token.value[1] = '\0';
+            return token;
+        }
+
+        // Operators (single or multi-character)
+        int lookahead = fgetc(input);
+        token.type = TOKEN_OPERATOR;
+        build_operator_token(&token, current_char, lookahead, input);
         return token;
     }
-
-    if (isalpha(current_char) || current_char == '_') {
-        return lex_identifier_or_keyword(ctx, current_char);
-    }
-
-    if (isdigit(current_char)) {
-        return lex_number(ctx, current_char);
-    }
-
-    // Punctuation (single-char delimiters)
-    int punct_type = classify_punctuation(current_char);
-    if (punct_type >= 0) {
-        token.type = (TokenType)punct_type;
-        token.value[0] = (char)current_char;
-        token.value[1] = '\0';
-        return token;
-    }
-
-    // Operators (single or multi-character)
-    int lookahead = fgetc(input);
-    token.type = TOKEN_OPERATOR;
-    build_operator_token(&token, current_char, lookahead, input);
-    return token;
 }

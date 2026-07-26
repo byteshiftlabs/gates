@@ -9,6 +9,9 @@
 #include "utils.h"
 #include "error_handler.h"
 #include "tokenizer.h"
+#include "config.h"
+
+static ASTNode* parse_statement_inner(ParserContext *ctx);
 
 // Constants
 #define ARRAY_SIZE_BUFFER_SIZE 256
@@ -341,7 +344,24 @@ static ASTNode* parse_return_statement(ParserContext *ctx)
     return stmt_node;
 }
 
+// Depth-guarded entry point. The real body is below; this wrapper is the one
+// place the nesting counter is maintained, so every return path stays balanced.
 ASTNode* parse_statement(ParserContext *ctx)
+{
+    if (ctx->depth >= GATES_MAX_PARSE_DEPTH) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Statement nesting exceeds the maximum depth of %d",
+                  GATES_MAX_PARSE_DEPTH);
+        return NULL;
+    }
+
+    ctx->depth++;
+    ASTNode *stmt = parse_statement_inner(ctx);
+    ctx->depth--;
+    return stmt;
+}
+
+static ASTNode* parse_statement_inner(ParserContext *ctx)
 {
     ASTNode *stmt_node = create_node(NODE_STATEMENT);
     
