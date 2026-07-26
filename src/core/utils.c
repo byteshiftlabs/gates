@@ -11,6 +11,11 @@
 // Prevents buffer overflows when building strings incrementally (e.g. VHDL identifiers).
 void safe_append(char *dst, size_t dst_size, const char *src)
 {
+    // Without this guard dst_size == 0 underflows the comparison below to
+    // SIZE_MAX and the copy length becomes unbounded. safe_copy already guards.
+    if (dst_size == 0) {
+        return;
+    }
     size_t used = strlen(dst);
     if (used >= dst_size - 1) {
         return;
