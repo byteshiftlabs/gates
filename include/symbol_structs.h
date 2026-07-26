@@ -6,9 +6,13 @@
  * @brief Struct symbol table for tracking declared structs and their fields.
  */
 
-// Table and buffer limits
-#define MAX_STRUCTS          64
-#define MAX_STRUCT_FIELDS    32
+#include "config.h"
+
+// Table and buffer limits. The table sizes follow the configured
+// GATES_MAX_STRUCTS / GATES_MAX_STRUCT_FIELDS so the documented -D
+// overrides actually take effect.
+#define MAX_STRUCTS          GATES_MAX_STRUCTS
+#define MAX_STRUCT_FIELDS    GATES_MAX_STRUCT_FIELDS
 #define STRUCT_NAME_LENGTH   64
 #define FIELD_NAME_LENGTH    64
 #define FIELD_TYPE_LENGTH    32
