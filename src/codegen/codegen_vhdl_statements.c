@@ -11,6 +11,7 @@
 #include "codegen_vhdl_expressions.h"
 #include "error_handler.h"
 #include "symbol_structs.h"
+#include "utils.h"
 
 // File-scoped helpers (forward declarations for top-down organization)
 static void emit_variable_initializer(ASTNode *declaration,
@@ -301,18 +302,30 @@ static void emit_array_element_assignment(const ASTNode *left_hand_side,
     }
 
     char array_name[ARRAY_NAME_BUFFER_SIZE] = {0};
-    int name_length = (int)(left_bracket - left_hand_side->value);
-    strncpy(array_name, left_hand_side->value, (size_t)name_length);
-    array_name[name_length] = '\0';
+    size_t name_length = (size_t)(left_bracket - left_hand_side->value);
+    if (name_length >= sizeof(array_name)) {
+        log_error(ERROR_CATEGORY_CODEGEN, 0,
+                  "Array name exceeds %zu characters in assignment to '%s'",
+                  sizeof(array_name) - 1, left_hand_side->value);
+        emit_raw("-- Array name too long\n");
+        return;
+    }
+    safe_copy(array_name, sizeof(array_name), left_hand_side->value, name_length);
 
     const char *index_start = left_bracket + 1;
     const char *index_end = strchr(index_start, ']');
 
     if (index_end != NULL && index_end > index_start) {
         char array_index[ARRAY_INDEX_BUFFER_SIZE] = {0};
-        int index_length = (int)(index_end - index_start);
-        strncpy(array_index, index_start, (size_t)index_length);
-        array_index[index_length] = '\0';
+        size_t index_length = (size_t)(index_end - index_start);
+        if (index_length >= sizeof(array_index)) {
+            log_error(ERROR_CATEGORY_CODEGEN, 0,
+                      "Array index expression exceeds %zu characters in assignment to '%s'",
+                      sizeof(array_index) - 1, left_hand_side->value);
+            emit_raw("-- Array index too long\n");
+            return;
+        }
+        safe_copy(array_index, sizeof(array_index), index_start, index_length);
 
         emit_raw("%s(%s) <= ", array_name, array_index);
         node_generator(right_hand_side);
