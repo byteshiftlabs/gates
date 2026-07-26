@@ -125,32 +125,12 @@ docker build --build-arg RUN_VALIDATION=1 -t gates . # validate during build
 - No `switch/case` or `do-while`
 - No nested structs or arrays of structs
 - No `%` (modulo)
-- Only one declarator per declaration — `int x = 1, y = 2;` silently drops `y`
-- Identifiers longer than 127 characters are silently truncated in expressions
-
-### Generated VHDL is not yet analyzer-clean
-
-A pre-release audit found several constructs that produce VHDL a simulator or
-synthesis tool will reject. These are open defects, not design choices:
-
-- Arrays with initializers emit a duplicate `signal` declaration
-- Struct record types are emitted at file scope, outside any design unit
-- Struct field writes and some operands reference signals that are never declared
-- A parameter named `result` collides with the generated `result` output port
-- C identifiers that are VHDL reserved words (`signal`, `entity`, …) are emitted unquoted
-- `return f(x);` is silently dropped, leaving `result` undriven
-- Array indexing inside a condition emits C bracket syntax
-
-Treat generated VHDL as a starting point requiring review, not as a drop-in
-artifact.
+- Only one declarator per declaration — `int x = 1, y = 2;` is rejected
 
 ### Robustness
 
-- Deeply nested expressions or statements can exhaust the stack; there is no depth limit
-- Malformed conditions such as `if ()` or `while ()` crash code generation
 - Array bounds checking is skipped for array names longer than 63 characters
 - Parsing stops at the first error; there is no error recovery
-- `-DGATES_MAX_ARRAYS` and `-DGATES_MAX_STRUCTS` are accepted but currently ignored
 
 ### Not yet cross-function
 
@@ -170,8 +150,9 @@ self-contained.
 
 It does **not** prove the generated VHDL analyzes, simulates, or synthesizes. No
 simulator, vendor synthesis, or timing/resource closure runs in CI. The structural
-checks are self-contained assertions about the emitted text, which is why the
-defects listed above were not caught. Behavioral verification is planned — see
+checks are self-contained assertions about the emitted text, which is why past
+codegen defects (see [ROADMAP.md](ROADMAP.md) Phase 0) went uncaught until a
+dedicated audit found them. Behavioral verification is planned — see
 [ROADMAP.md](ROADMAP.md) Phase 3.
 
 ## Project Structure
