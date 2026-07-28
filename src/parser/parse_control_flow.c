@@ -62,6 +62,7 @@ static void parse_else_blocks(ParserContext *ctx, ASTNode *if_node)
             if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
                 log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                           "Expected '}' after else if block");
+                free_node(elseif_node);
                 return;
             }
             
@@ -86,6 +87,7 @@ static void parse_else_blocks(ParserContext *ctx, ASTNode *if_node)
             if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
                 log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                           "Expected '}' after else block");
+                free_node(else_node);
                 return;
             }
             
@@ -198,6 +200,7 @@ ASTNode* parse_while_statement(ParserContext *ctx)
     if (!consume(ctx, TOKEN_BRACE_CLOSE)) {
         log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                   "Expected '}' after while block");
+        free_node(while_node);
         return NULL;
     }
     
