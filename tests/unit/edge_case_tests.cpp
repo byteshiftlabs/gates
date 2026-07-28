@@ -239,6 +239,53 @@ TEST_F(EdgeCaseTest, CommentOnlyInput) {
 }
 
 // -------------------------------------------------------------------
+// emit_indent_inc() clamped at MAX_INDENT while emit_indent_dec() always
+// decremented, so nesting deeper than the clamp unwound past zero and
+// every later line lost its indentation.
+// -------------------------------------------------------------------
+TEST_F(EdgeCaseTest, DeepNestingDoesNotLoseIndentation) {
+    const int depth = 20;   // MAX_INDENT is 16
+    std::string src = "int f(int a) { int r; r = 0; ";
+    for (int i = 0; i < depth; i++) src += "if (a) { ";
+    src += "r = 1; ";
+    for (int i = 0; i < depth; i++) src += "} ";
+    src += "return r; }";
+
+    FILE *fin = tmpfile();
+    ASSERT_NE(fin, nullptr);
+    fwrite(src.c_str(), 1, src.size(), fin);
+    rewind(fin);
+    ASTNode *program = parse_program(fin);
+    fclose(fin);
+    ASSERT_NE(program, nullptr);
+
+    FILE *fout = tmpfile();
+    ASSERT_NE(fout, nullptr);
+    generate_vhdl(program, fout);
+    free_node(program);
+
+    fseek(fout, 0, SEEK_END);
+    long size = ftell(fout);
+    rewind(fout);
+    std::string vhdl(static_cast<size_t>(size), '\0');
+    size_t got = fread(&vhdl[0], 1, static_cast<size_t>(size), fout);
+    (void)got;
+    fclose(fout);
+
+    EXPECT_NE(vhdl.find("  end process;"), std::string::npos)
+        << "Closing lines must keep their indentation after deep nesting";
+    EXPECT_EQ(vhdl.find("\nend process;"), std::string::npos)
+        << "end process must not unwind to column zero";
+}
+
+TEST_F(EdgeCaseTest, SafeAppendHandlesZeroSizedDestination) {
+    char buf[4] = "xyz";
+    safe_append(buf, 0, "hello");   // must be a no-op, not an unbounded copy
+    EXPECT_STREQ(buf, "xyz");
+}
+
+
+// -------------------------------------------------------------------
 // for-header clauses desynchronised in two ways: a bare-expression init
 // was backtracked over but never consumed, and the caller advanced past
 // an extra semicolon whenever the condition clause was empty.

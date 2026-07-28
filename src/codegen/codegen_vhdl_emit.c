@@ -35,10 +35,7 @@ FILE* emit_get_file(void)
 
 void emit_indent_inc(void)
 {
-    if (g_indent < MAX_INDENT)
-    {
-        ++g_indent;
-    }
+    ++g_indent;
 }
 
 void emit_indent_dec(void)
@@ -81,7 +78,10 @@ void emit_indent(void)
         return;
     }
     
-    for (int i = 0; i < g_indent; ++i)
+    // Depth is tracked exactly and clamped only here, so that nesting deeper
+    // than MAX_INDENT still unwinds to the right level on the way out
+    const int level = (g_indent < MAX_INDENT) ? g_indent : MAX_INDENT;
+    for (int i = 0; i < level; ++i)
     {
         fprintf(g_output, INDENT_STR);
     }
