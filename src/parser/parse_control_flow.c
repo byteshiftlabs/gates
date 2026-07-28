@@ -29,10 +29,16 @@ static void parse_else_blocks(ParserContext *ctx, ASTNode *if_node)
             }
             
             ASTNode *else_if_cond = parse_expression(ctx);
-            
+            if (!else_if_cond) {
+                log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                          "Expected expression in else if condition");
+                return;
+            }
+
             if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
                 log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                           "Expected ')' after else if condition");
+                free_node(else_if_cond);
                 return;
             }
             if (!consume(ctx, TOKEN_BRACE_OPEN)) {
@@ -103,17 +109,22 @@ ASTNode* parse_if_statement(ParserContext *ctx)
     }
     
     ASTNode *cond_expr = parse_expression(ctx);
-    
+    if (!cond_expr) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected expression in if condition");
+        return NULL;
+    }
+
     if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
         log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                   "Expected ')' after if condition");
-        if (cond_expr) free_node(cond_expr);
+        free_node(cond_expr);
         return NULL;
     }
     if (!consume(ctx, TOKEN_BRACE_OPEN)) {
         log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                   "Expected '{' after if condition");
-        if (cond_expr) free_node(cond_expr);
+        free_node(cond_expr);
         return NULL;
     }
     
@@ -153,17 +164,22 @@ ASTNode* parse_while_statement(ParserContext *ctx)
     }
     
     ASTNode *cond_expr = parse_expression(ctx);
-    
+    if (!cond_expr) {
+        log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                  "Expected expression in while condition");
+        return NULL;
+    }
+
     if (!consume(ctx, TOKEN_PARENTHESIS_CLOSE)) {
         log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                   "Expected ')' after while condition");
-        if (cond_expr) free_node(cond_expr);
+        free_node(cond_expr);
         return NULL;
     }
     if (!consume(ctx, TOKEN_BRACE_OPEN)) {
         log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
                   "Expected '{' after while condition");
-        if (cond_expr) free_node(cond_expr);
+        free_node(cond_expr);
         return NULL;
     }
     

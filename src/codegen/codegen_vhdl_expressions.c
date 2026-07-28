@@ -8,6 +8,8 @@
 #include "codegen_vhdl_constants.h"
 #include "codegen_vhdl_emit.h"
 #include "codegen_vhdl_helpers.h"
+#include "error_handler.h"
+#include "utils.h"
 
 // File-scoped helpers (forward declarations for top-down organization)
 static void emit_array_element_access(const char *array_expression);
@@ -163,30 +165,8 @@ void generate_expression(ASTNode *node)
         return;
     }
 
-    // Struct field encoded as a__b -> a.b
-    if (strstr(node->value, "__") != NULL)
-    {
-        char buffer[MAX_BUFFER_SIZE];
-        char *char_ptr = NULL;
-        
-        strncpy(buffer, node->value, sizeof(buffer) - 1);
-        buffer[sizeof(buffer) - 1] = '\0';
-        
-        for (char_ptr = buffer; *char_ptr != '\0'; ++char_ptr)
-        {
-            if (*char_ptr == '_' && *(char_ptr + 1) == '_')
-            {
-                *char_ptr = '.';
-                memmove(char_ptr + 1, char_ptr + 2, strlen(char_ptr + 2) + 1);
-            }
-        }
-        
-        emit_raw("%s", buffer);
-        return;
-    }
-
-    // Use mapped signal name for variables
-    emit_mapped_signal_name(node->value);
+    // Struct fields decoded to dotted form, everything else through the mapper
+    emit_variable_reference(node->value);
 }
 
 // VHDL has no unary operator syntax like C; map ! to boolean test and ~ to bitwise not
@@ -271,20 +251,34 @@ static void emit_array_element_access(const char *array_expression)
     }
 
     char array_name[ARRAY_NAME_BUFFER_SIZE] = {0};
-    int name_length = (int)(left_bracket - array_expression);
-    strncpy(array_name, array_expression, (size_t)name_length);
-    array_name[name_length] = '\0';
-    
+    size_t name_length = (size_t)(left_bracket - array_expression);
+    if (name_length >= sizeof(array_name))
+    {
+        log_error(ERROR_CATEGORY_CODEGEN, 0,
+                  "Array name exceeds %zu characters in '%s'",
+                  sizeof(array_name) - 1, array_expression);
+        emit_raw("-- Array name too long");
+        return;
+    }
+    safe_copy(array_name, sizeof(array_name), array_expression, name_length);
+
     const char *index_start = left_bracket + 1;
     const char *index_end = strchr(index_start, ']');
 
     if (index_end != NULL && index_end > index_start)
     {
         char array_index[ARRAY_INDEX_BUFFER_SIZE] = {0};
-        int index_length = (int)(index_end - index_start);
-        strncpy(array_index, index_start, (size_t)index_length);
-        array_index[index_length] = '\0';
-        
+        size_t index_length = (size_t)(index_end - index_start);
+        if (index_length >= sizeof(array_index))
+        {
+            log_error(ERROR_CATEGORY_CODEGEN, 0,
+                      "Array index expression exceeds %zu characters in '%s'",
+                      sizeof(array_index) - 1, array_expression);
+            emit_raw("-- Array index too long");
+            return;
+        }
+        safe_copy(array_index, sizeof(array_index), index_start, index_length);
+
         emit_raw("%s(%s)", array_name, array_index);
     }
     else
@@ -321,7 +315,20 @@ void emit_conditional_expression(ASTNode *condition, void (*node_generator)(ASTN
     }
     else if (condition->type == NODE_EXPRESSION && condition->value != NULL)
     {
-        emit_raw("unsigned(%s) /= 0", condition->value);
+        // Dispatch rather than printing the raw value. Array access needs VHDL
+        // parentheses, not C brackets, and a bare integer literal cannot be
+        // type-converted with unsigned() — numeric_std requires to_unsigned().
+        if (is_numeric_literal(condition->value))
+        {
+            emit_unsigned_cast(condition->value);
+            emit_raw(" /= 0");
+        }
+        else
+        {
+            emit_raw("unsigned(");
+            node_generator(condition);
+            emit_raw(") /= 0");
+        }
     }
     else
     {

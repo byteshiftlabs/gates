@@ -1,131 +1,132 @@
 # Gates Roadmap
 
-This document outlines the planned features, improvements, and milestones for Gates.
+Planned features and milestones for Gates, in the order they should be tackled.
+
+Phases are ordered by dependency, not preference. Correctness work precedes new
+language features, because every new construct multiplies the surface area of an
+unfixed codegen bug.
 
 ---
 
-## Phase 1: Core Language Support (Current)
+## Phase 0: Release Blockers (Current)
 
-### ✅ Completed
-- Tokenizer and recursive-descent parser
-- Full expression precedence handling
+Found by a pre-publication audit. These block a public release and come before
+any Phase 2 feature work.
+
+### Memory safety and crashes
+
+- [ ] Stack buffer overflow copying array names and indices — fix open in PR #19
+- [ ] NULL dereference in codegen on empty conditions — `if ()` and `while ()` crash
+- [ ] Recursion depth limits for the parser, code generator, and `free_node`
+- [ ] Convert the lexer's per-comment recursion in `get_next_token()` to a loop
+- [ ] Restore `capacity` after a failed `realloc` in `add_child()`
+
+### Correct VHDL output
+
+The structural test suite asserts on emitted text and therefore missed all of
+these. Each produces output a VHDL analyzer rejects.
+
+- [ ] Duplicate `signal` declaration for every initialized array
+- [ ] Struct record types emitted at file scope, outside any design unit
+- [ ] Struct field writes emit an undeclared flat signal (`p_x` vs `p.x`)
+- [ ] Operands bypass signal mapping — reads of the `result` out port, undeclared `p__x`
+- [ ] A parameter named `result` produces a duplicate port name
+- [ ] VHDL reserved words used as C identifiers are emitted unquoted
+- [ ] `return f(x);` is dropped, leaving `result` undriven
+- [ ] Conditions bypass expression generation — `arr[0]` and `unsigned(1)` leak through
+
+### Diagnostics and contract
+
+- [ ] Exit status must reflect code generation errors — fix open in PR #18
+- [ ] Parenthesized low-precedence operators rejected by the parser — fix open in PR #20
+- [ ] Do not truncate the output file until compilation succeeds
+- [ ] Reject a directory or unreadable file as input instead of reporting success
+- [ ] Make silent truncations fatal: identifiers over 127 chars, array names over 63
+- [ ] Reject, rather than discard, trailing garbage after an initializer
+- [ ] Parse multi-declarator declarations (`int x = 1, y = 2;`) or reject them
+- [ ] Fix `for`-init backtracking leaving the parser desynchronized
+- [ ] Wire up `GATES_MAX_ARRAYS` / `GATES_MAX_STRUCTS`, or remove them from the documented knobs
+- [ ] Free partially built nodes on parser error paths
+
+---
+
+## Phase 1: Core Language Support ✅
+
+- Tokenizer and recursive-descent parser with full expression precedence
 - Control flow: `if/else`, `while`, `for`, `break`, `continue`
-- Function calls in all contexts
-- Return value propagation (expression returns, struct field-by-field copy, negative literals)
-- Basic struct support with field access
-- Array declarations and indexing
+- Function calls and return value propagation
+- Structs with field access; array declarations and indexing
 - VHDL entity/architecture generation with clock/reset, signals, and synchronous processes
-- Multi-level error diagnostics (error/warning/note × 5 categories)
-- Source location tracking with line/column reporting
-- Colored terminal output (ANSI: red errors, yellow warnings, blue notes)
-- Unit, integration, structural validation, and edge case test coverage (GoogleTest)
-- Signal naming collision handling (`emit_mapped_signal_name()` with `_local` suffix, PR #12)
-
-### 📋 Planned
-- Sphinx documentation content (infrastructure exists, content needed)
+- Multi-level error diagnostics with source locations and colored output
+- GoogleTest unit, integration, structural, edge case, and CLI coverage
+- Sphinx documentation (architecture, internals, usage, testing)
 
 ---
 
 ## Phase 2: Language Completeness
 
-### Control Flow
-- [ ] **`switch/case` statement**
-  Maps directly to VHDL `case` — one of the most common C constructs, conspicuously missing.
-- [ ] **`do-while` loop**
-  Trivial extension of existing `while` support. Maps to VHDL loop with exit condition at bottom.
+### Control flow
+- [ ] `switch/case` — maps directly to VHDL `case`
+- [ ] `do-while` — VHDL loop with the exit condition at the bottom
 
-### Pointer Support
-- [ ] **Address-of operator (`&`)**
-  Tokenizer and parser support for unary `&`. Codegen maps to signal references.
-- [ ] **Pointer dereference (`*`)**
-  Parser support for unary `*` in expressions. Extend `parse_identifier()` dispatcher (already structured for this).
-- [ ] **Pointer arithmetic for array traversal**
-  Support `ptr + offset` patterns that map to array indexing in VHDL.
+### Pointers
+- [ ] Address-of (`&`) and dereference (`*`) in expressions
+- [ ] Pointer arithmetic for array traversal
 
-### Data Types
-- [ ] **Character literal tokenization**
-  Add `TOKEN_CHAR_LITERAL` to the tokenizer. Currently single-quoted characters have no dedicated token type.
-- [ ] **String literal exclusion (explicit)**
-  Strings have no VHDL equivalent. Document this as an intentional non-goal and emit a clear error if encountered.
+### Data types
+- [ ] `TOKEN_CHAR_LITERAL` for single-quoted characters
+- [ ] `%` (modulo) — currently fails with a misleading syntax error
+- [ ] Reject string literals explicitly; they have no VHDL equivalent
 
-### Global Variables
-- [ ] **Parser support for global declarations**
-  Recognize variable definitions outside functions and store them in the AST.
-- [ ] **Symbol table scoping updates**
-  Distinguish global vs local scope so codegen knows where to place signals.
-- [ ] **VHDL signal generation at architecture level**
-  Emit globals as architecture-level signals visible to all processes.
-- [ ] **Cross-function access patterns**
-  Handle reads/writes to globals from multiple functions without conflicts.
+### Global variables
+- [ ] Parse declarations outside functions
+- [ ] Distinguish global and local scope in the symbol table
+- [ ] Emit globals as architecture-level signals
+- [ ] Handle cross-function reads and writes
 
-### Advanced Structs
-- [ ] **Nested struct definitions**
-  Allow structs containing other structs as fields (e.g., `struct A { struct B inner; }`).
-- [ ] **Arrays of structs**
-  Support declaring and indexing arrays where each element is a struct.
-- [ ] **Struct assignment operations**
-  Enable copying entire structs with `=` instead of field-by-field assignment.
+### Advanced structs
+- [ ] Nested struct definitions
+- [ ] Arrays of structs
+- [ ] Whole-struct assignment with `=`
 
 ---
 
-## Phase 3: Testing Infrastructure
+## Phase 3: Verification Infrastructure
 
-Code coverage and fuzz testing must come *before* adding complex features — you need coverage data to know where the gaps are, and fuzz testing catches parser bugs that haunt you later. VHDL simulator verification remains planned infrastructure work, but it is not a prerequisite for the current public release while the simulator is still under development.
+Behavioral verification is the missing half of the proof bar. The current suite
+checks emitted text, not whether that text analyzes.
 
-- [ ] **Code coverage reporting**
-  Track which lines/branches are exercised by tests to find gaps. Use gcov/lcov with CMake.
-- [ ] **Fuzz testing for parser robustness**
-  Feed random/malformed inputs to catch crashes and edge cases. AFL or libFuzzer.
-- [ ] **VHDL simulation verification**
-  Run generated VHDL through a simulator (GHDL/ModelSim) once the simulator path is ready, to add post-release behavioral validation.
-- [ ] **Benchmark suite for complex inputs**
-  Measure compile time and output quality on realistic, larger programs.
+- [ ] **Behavioural verification of generated VHDL** — route the emitted output through
+      the in-house simulator once that path is ready. This is the single highest-value
+      addition; it would have caught every Phase 0 codegen defect.
+- [ ] Code coverage reporting (gcov/lcov) to find untested paths
+- [ ] Fuzz testing for parser and codegen robustness (AFL or libFuzzer)
+- [ ] Benchmark suite for larger, realistic inputs
 
 ---
 
-## Phase 4: Correct & Complete VHDL Generation
+## Phase 4: Complete VHDL Generation
 
-Before optimizing anything, the generated VHDL must be correct and complete for all supported C constructs.
-
-### Signal Management
-- [ ] **Unique naming scheme for all contexts**
-  Prevent collisions when the same variable name appears in different scopes.
-- [ ] **Hierarchical signal prefixing**
-  Prefix signals with function/block names for clarity in generated VHDL.
-- [ ] **Temporary signal reduction**
-  Minimize intermediate signals by inlining simple expressions.
-
-### Multi-Function Support
-- [ ] **Function-to-entity mapping strategy**
-  Define how multiple C functions map to VHDL: separate entities, component instantiation, or processes.
-- [ ] **Inter-function signal wiring**
-  Connect output ports of one entity to input ports of another for function call chains.
-
-### Parser Robustness
-- [ ] **Error recovery (panic mode)**
-  Synchronize to the next statement boundary after a syntax error instead of aborting. Makes the tool usable on real code with typos.
-
-### Testbench Generation
-- [ ] **Basic testbench output**
-  Generate a VHDL testbench alongside each entity for quick simulation verification.
+- [ ] Unique, hierarchical signal naming across scopes
+- [ ] Temporary signal reduction for simple expressions
+- [ ] Function-to-entity mapping strategy (entities, components, or processes)
+- [ ] Inter-function signal wiring for call chains
+- [ ] Parser error recovery (panic mode) so multiple errors are reported per run
+- [ ] Testbench generation alongside each entity
 
 ---
 
 ## Phase 5: VHDL Optimization
 
-Only after Phase 4 produces correct, complete output.
+Only once Phase 4 output is correct and complete.
 
-- [ ] **Resource sharing for repeated operations**
-  Reuse adders/multipliers across different expressions to reduce hardware.
-- [ ] **Pipeline stage insertion**
-  Automatically add registers between combinational stages to meet timing.
-- [ ] **Constant folding and propagation**
-  Evaluate compile-time constants and replace variables with known values.
-- [ ] **Dead code elimination**
-  Remove signals and logic that have no effect on outputs.
+- [ ] Resource sharing for repeated operations
+- [ ] Pipeline stage insertion
+- [ ] Constant folding and propagation
+- [ ] Dead code elimination
 
 ---
 
 ## Contributing
 
-See the full documentation for contribution guidelines and architecture details.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the Sphinx docs for architecture details.
