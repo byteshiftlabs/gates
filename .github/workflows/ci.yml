@@ -39,7 +39,7 @@ jobs:
             -w /workspace \
             "$CI_IMAGE" \
             bash -lc '
-              ./run_validation.sh
+              ./ci/run_validation.sh
             '
 
       - name: Upload docs artifact

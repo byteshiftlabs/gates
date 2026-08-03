@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# build_and_run.sh - Convenience script to configure, build, test (optional) and run the 'gates' executable
+# build.sh - Configure and build the 'gates' executable
 #
 # Features:
 #  - Idempotent incremental builds (reconfigure only when needed)
 #  - Debug / Release toggle (default Release)
 #  - Optional clean
-#  - Optional test execution
-#  - Pass-through of remaining args to the executable
+#  - Optional test build + run
 #  - Minimal dependency on global environment; works in fresh clone
 #
 # Usage:
-#   ./build_and_run.sh [options] [-- <program arguments>]
+#   ./build.sh [options]
 # Options:
 #   -d, --debug          Build with DEBUG=ON and CMAKE_BUILD_TYPE=Debug
 #   -r, --release        Force Release build (default)
 #   -c, --clean          Remove build directory before configuring
-#   -t, --tests          Run tests after build (if enabled in CMake)
+#   -t, --tests          Build gates_tests and run ctest after building
 #       --no-tests       Skip tests (default)
 #   -j, --jobs N         Parallel build jobs (default: number of cores)
 #       --preset NAME    Use a CMake preset if available
@@ -25,9 +24,9 @@
 #   -h, --help           Show help
 #
 # Examples:
-#   ./build_and_run.sh -- examples/example.c output.vhdl
-#   ./build_and_run.sh --tests -- examples/example.c output.vhdl
-#   ./build_and_run.sh --build-dir build-debug -d -- examples/example.c output.vhdl
+#   ./build.sh
+#   ./build.sh --tests
+#   ./build.sh --build-dir build-debug -d
 #
 set -euo pipefail
 IFS=$'\n\t'
@@ -44,7 +43,6 @@ GENERATOR=""
 VERBOSE=0
 JOBS=""
 CLEAN=0
-PROGRAM_ARGS=()
 
 color() { local code="$1"; shift; if [[ -t 1 ]]; then printf "\e[%sm%s\e[0m" "$code" "$*"; else printf "%s" "$*"; fi; }
 info()  { echo "$(color 36 [INFO]) $*"; }
@@ -71,8 +69,7 @@ while [[ $# -gt 0 ]]; do
        --build-dir=*) BUILD_DIR="$(realpath -m "${1#*=}")";;
     -v|--verbose) VERBOSE=1;;
     -h|--help)    show_help; exit 0;;
-    --) shift; PROGRAM_ARGS=("$@"); break;;
-    *) PROGRAM_ARGS+=("$1");; # passthrough to executable
+    *) err "Unknown argument: $1"; show_help; exit 1;;
   esac
   shift || true
 done
@@ -127,21 +124,13 @@ info "Building target 'gates'"
 
 # Optional tests
 if [[ $RUN_TESTS -eq 1 ]]; then
-  if [[ -x "$BUILD_DIR/gates_tests" ]]; then
-    info "Running tests (gates_tests)"
-    (cd "$BUILD_DIR" && ctest --output-on-failure) || { err "Tests failed"; exit 1; }
-  else
-    warn "Tests requested but gates_tests not built (maybe ENABLE_TESTING=OFF or no tests present)."
-  fi
+  TEST_BUILD_CMD=(cmake --build "$BUILD_DIR" --target gates_tests)
+  if [[ -n "$JOBS" ]]; then TEST_BUILD_CMD+=(-- -j"$JOBS"); fi
+  info "Building target 'gates_tests'"
+  "${TEST_BUILD_CMD[@]}" || { err "Test build failed"; exit 1; }
+
+  info "Running tests"
+  (cd "$BUILD_DIR" && ctest --output-on-failure) || { err "Tests failed"; exit 1; }
 fi
 
-# Run executable
-EXEC_PATH="$BUILD_DIR/gates"
-if [[ ! -x "$EXEC_PATH" ]]; then
-  err "Executable not found: $EXEC_PATH"; exit 1
-fi
-info "Running: $EXEC_PATH ${PROGRAM_ARGS[*]:-}";
-"$EXEC_PATH" "${PROGRAM_ARGS[@]}"
-EXIT_CODE=$?
-info "Program exited with code $EXIT_CODE"
-exit $EXIT_CODE
+info "Build complete: $BUILD_DIR/gates"

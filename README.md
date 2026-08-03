@@ -22,7 +22,7 @@ cmake --build build --target gates -j"$(nproc)"
 ./build/gates input.c output.vhdl
 ```
 
-`./run_validation.sh` runs the full local proof bar: tests, smoke translation of
+`./ci/run_validation.sh` runs the full local proof bar: tests, smoke translation of
 the curated examples, docs build, and `cppcheck`. Run it before treating a change
 as release-ready.
 
@@ -107,7 +107,7 @@ Bit width and parameter limits are configurable:
 Two supported paths:
 
 1. **Native Ubuntu 24.04 x86_64** — the fast local iteration path documented above.
-2. **Docker** — the authoritative gate. CI builds the image and runs `./run_validation.sh` inside it.
+2. **Docker** — the authoritative gate. CI builds the image and runs `./ci/run_validation.sh` inside it.
 
 If the two disagree, Docker decides.
 
@@ -160,7 +160,7 @@ self-contained.
 
 ## Validation Scope
 
-`./run_validation.sh` proves:
+`./ci/run_validation.sh` proves:
 
 - unit and integration tests via GoogleTest/CTest
 - structural checks in the test suite (balanced constructs, type wrapping)
