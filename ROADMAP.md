@@ -8,45 +8,58 @@ unfixed codegen bug.
 
 ---
 
-## Phase 0: Release Blockers (Current)
+## Phase 0: Release Blockers ✅ (one item remaining)
 
-Found by a pre-publication audit. These block a public release and come before
-any Phase 2 feature work.
+Found by a pre-publication audit. Fixed across PRs #18–#36, verified against
+the current codebase during a second publication audit.
 
-### Memory safety and crashes
+### Memory safety and crashes — fixed
 
-- [ ] Stack buffer overflow copying array names and indices — fix open in PR #19
-- [ ] NULL dereference in codegen on empty conditions — `if ()` and `while ()` crash
-- [ ] Recursion depth limits for the parser, code generator, and `free_node`
-- [ ] Convert the lexer's per-comment recursion in `get_next_token()` to a loop
-- [ ] Restore `capacity` after a failed `realloc` in `add_child()`
+- Stack buffer overflow copying array names and indices (PR #19)
+- NULL dereference in codegen on empty conditions — `if ()` and `while ()` crashed (PR #22)
+- Recursion depth limits added for the parser; bounds the AST that codegen and
+  `free_node` walk (PR #23)
+- The lexer's per-comment recursion in `get_next_token()` converted to a loop (PR #23)
+- `capacity` restored after a failed `realloc` in `add_child()` (PR #28)
 
-### Correct VHDL output
+### Correct VHDL output — fixed
 
-The structural test suite asserts on emitted text and therefore missed all of
-these. Each produces output a VHDL analyzer rejects.
+The structural test suite asserted on emitted text and therefore missed all of
+these; each produced output a VHDL analyzer rejects.
 
-- [ ] Duplicate `signal` declaration for every initialized array
-- [ ] Struct record types emitted at file scope, outside any design unit
-- [ ] Struct field writes emit an undeclared flat signal (`p_x` vs `p.x`)
-- [ ] Operands bypass signal mapping — reads of the `result` out port, undeclared `p__x`
-- [ ] A parameter named `result` produces a duplicate port name
-- [ ] VHDL reserved words used as C identifiers are emitted unquoted
-- [ ] `return f(x);` is dropped, leaving `result` undriven
-- [ ] Conditions bypass expression generation — `arr[0]` and `unsigned(1)` leak through
+- Duplicate `signal` declaration for every initialized array (PR #24)
+- Struct record types emitted at file scope, outside any design unit (PR #30)
+- Struct field writes emitted an undeclared flat signal — `p_x` vs `p.x` (PR #31)
+- Operands bypassed signal mapping — reads of the `result` out port, undeclared
+  `p__x` (PR #25, #31)
+- A parameter named `result` produced a duplicate port name (PR #25)
+- VHDL reserved words used as C identifiers were emitted unquoted (PR #25)
+- `return f(x);` was dropped, leaving `result` undriven (PR #33)
+- Conditions bypassed expression generation — `arr[0]` and `unsigned(1)` leaked
+  through (PR #32)
 
-### Diagnostics and contract
+### Diagnostics and contract — fixed
 
-- [ ] Exit status must reflect code generation errors — fix open in PR #18
-- [ ] Parenthesized low-precedence operators rejected by the parser — fix open in PR #20
-- [ ] Do not truncate the output file until compilation succeeds
-- [ ] Reject a directory or unreadable file as input instead of reporting success
-- [ ] Make silent truncations fatal: identifiers over 127 chars, array names over 63
-- [ ] Reject, rather than discard, trailing garbage after an initializer
-- [ ] Parse multi-declarator declarations (`int x = 1, y = 2;`) or reject them
-- [ ] Fix `for`-init backtracking leaving the parser desynchronized
-- [ ] Wire up `GATES_MAX_ARRAYS` / `GATES_MAX_STRUCTS`, or remove them from the documented knobs
-- [ ] Free partially built nodes on parser error paths
+- Exit status now reflects code generation errors (PR #18)
+- Parenthesized low-precedence operators no longer rejected by the parser (PR #20)
+- Output file is no longer truncated until compilation succeeds (PR #26)
+- A directory or unreadable file as input is now rejected instead of reporting
+  success (PR #26)
+- Identifiers over 127 characters are now rejected instead of silently
+  truncated (PR #34)
+- Trailing garbage after an initializer is now rejected instead of discarded (PR #27)
+- Multi-declarator declarations (`int x = 1, y = 2;`) are now rejected instead
+  of silently dropping every declarator after the first (PR #27)
+- `for`-init backtracking desync fixed (PR #35)
+- `GATES_MAX_ARRAYS` / `GATES_MAX_STRUCTS` wired up to the symbol table (PR #29)
+- Partially built nodes are now freed on parser error paths (PR #36)
+
+### Remaining
+
+- [ ] Array names over 63 characters are still silently truncated in the
+      symbol table, which registers by truncated name but is looked up by
+      exact match elsewhere — bounds checking silently no-ops instead of
+      becoming fatal. See `docs/source/known_issues.rst`.
 
 ---
 
