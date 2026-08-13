@@ -23,7 +23,7 @@
 // -------------------------------------------------------------
 // Note: These globals are used for single-threaded, single-file compilation.
 // For multi-threaded usage, refactor to use a CompilerContext struct.
-// Call reset_error_state() between independent compilations.
+// Call reset_error_counters() between independent compilations.
 // -------------------------------------------------------------
 static int error_count = 0;
 static int warning_count = 0;
