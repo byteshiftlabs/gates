@@ -74,6 +74,10 @@ The compiler uses global state in several modules to keep the current single-fil
 - **Limitation**: Not thread-safe. For parallel compilation, each thread would need isolated symbol tables.
 - **Reset**: Call ``reset_struct_table()`` and ``reset_array_table()`` between compilations.
 
+**Code Generator** (``codegen_vhdl_main.c``):
+
+- ``generate_vhdl()`` calls ``emit_init()`` as its own first line on every invocation, resetting the codegen module's internal indentation and output-file pointer. No separate reset call is needed for codegen state between compilations — only the error handler and symbol tables above require an explicit reset.
+
 **Future Consideration**: If multi-threaded compilation is needed, these modules should be refactored to use a context struct passed through the call chain.
 
 Out-of-Memory Handling
