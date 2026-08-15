@@ -1139,3 +1139,148 @@ TEST_F(EndToEndTest, UninitialisedArrayDeclaresItsSignalOnce) {
     EXPECT_EQ(countOccurrences(vhdl, "signal b :"), 1u)
         << "Uninitialised array must still declare its signal exactly once";
 }
+
+// ==================================================================
+// SEQUENTIAL COMPILATION / RESET CONTRACT TESTS
+//
+// architecture.rst documents that reset_error_counters(), reset_array_table(),
+// and reset_struct_table() must be called between independent compilations
+// when gates is embedded in a tool. That contract had never been exercised
+// end-to-end: no test actually compiled one program, then a second,
+// unrelated program in the same process and checked that the second was
+// unaffected by the first. This is that test.
+// ==================================================================
+
+class SequentialCompilationTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        reset_array_table();
+        reset_struct_table();
+        reset_error_counters();
+    }
+
+    /**
+     * Helper: Parse C source and generate VHDL, returning the output as a
+     * string. Mirrors EndToEndTest::translate(); duplicated here so this
+     * fixture can compile two independent programs without either one
+     * resetting state on the other's behalf via SetUp().
+     */
+    std::string translate(const char *c_source) {
+        FILE *fin = tmpfile();
+        EXPECT_NE(fin, nullptr) << "tmpfile() failed for input";
+        if (!fin) return "";
+
+        fwrite(c_source, 1, strlen(c_source), fin);
+        rewind(fin);
+
+        ASTNode *program = parse_program(fin);
+        fclose(fin);
+        if (!program) return "";
+
+        FILE *fout = tmpfile();
+        EXPECT_NE(fout, nullptr) << "tmpfile() failed for output";
+        if (!fout) {
+            free_node(program);
+            return "";
+        }
+
+        generate_vhdl(program, fout);
+        free_node(program);
+
+        fseek(fout, 0, SEEK_END);
+        long size = ftell(fout);
+        rewind(fout);
+        std::string result(size, '\0');
+        size_t bytes_read = fread(&result[0], 1, size, fout);
+        (void)bytes_read;
+        fclose(fout);
+        return result;
+    }
+};
+
+TEST_F(SequentialCompilationTest, ResetsIsolateBackToBackCompilations) {
+    // ---- Compile A ----
+    // Registers struct "Shape" (fields width/height) and array "buf" (size
+    // 4). The trailing "int bad[0];" is unreachable (after the return) but
+    // still gets parsed, and a zero-sized array is rejected by
+    // register_array()'s validation, logging an error — giving A a nonzero
+    // error count to verify gets cleared before B. (Note: the array table
+    // itself is already reset per-function by the parser, since array
+    // lookups are only ever needed within the declaring function; that
+    // scoping is unrelated to the cross-compile reset contract this test
+    // is exercising, so this test does not assert on get_array_count()
+    // after A — only on the struct table and error counter, which persist
+    // for the whole file/compile.)
+    const char *source_a =
+        "struct Shape { int width; int height; };"
+        "int f(int n) {"
+        "  struct Shape shape;"
+        "  int buf[4];"
+        "  shape.width = n;"
+        "  buf[0] = n;"
+        "  return shape.width;"
+        "  int bad[0];"
+        "}";
+
+    std::string vhdl_a = translate(source_a);
+    ASSERT_FALSE(vhdl_a.empty());
+    EXPECT_NE(vhdl_a.find("width"), std::string::npos);
+    EXPECT_GT(get_struct_count(), 0);
+    EXPECT_GT(get_error_count(), 0)
+        << "A's zero-sized array declaration must be recorded as an error";
+
+    // ---- Apply the documented reset contract before compiling the next,
+    // independent program (architecture.rst, "Global State and Threading"). ----
+    reset_array_table();
+    reset_struct_table();
+    reset_error_counters();
+
+    ASSERT_EQ(get_error_count(), 0)
+        << "reset_error_counters() must zero the count left over from A";
+    ASSERT_EQ(get_array_count(), 0)
+        << "reset_array_table() must clear A's array registrations";
+    ASSERT_EQ(get_struct_count(), 0)
+        << "reset_struct_table() must clear A's struct registrations";
+
+    // ---- Compile B: an unrelated, valid program that reuses A's exact
+    // names ("Shape", "buf") with different definitions, so any stale
+    // symbol-table entry surviving from A would be caught red-handed. ----
+    const char *source_b =
+        "struct Shape { int radius; };"
+        "int g(int n) {"
+        "  struct Shape shape;"
+        "  int buf[9];"
+        "  shape.radius = n;"
+        "  buf[0] = n;"
+        "  return shape.radius;"
+        "}";
+    std::string vhdl_b = translate(source_b);
+    ASSERT_FALSE(vhdl_b.empty());
+
+    // B's error count must not be polluted by A's leftover codegen error.
+    EXPECT_EQ(get_error_count(), 0)
+        << "B is a valid program; A's codegen error must not leak forward";
+
+    // B must get its OWN struct definition, not A's stale one.
+    EXPECT_NE(vhdl_b.find("radius"), std::string::npos)
+        << "B's struct field must be present";
+    EXPECT_EQ(vhdl_b.find("width"), std::string::npos)
+        << "A's stale struct field must not leak into B's output";
+    EXPECT_EQ(vhdl_b.find("height"), std::string::npos)
+        << "A's stale struct field must not leak into B's output";
+
+    // B's array must reflect its own bound (9 elements), not A's (4).
+    EXPECT_NE(vhdl_b.find("0 to 8"), std::string::npos)
+        << "B's array bound must reflect its own declared size";
+    EXPECT_EQ(vhdl_b.find("0 to 3"), std::string::npos)
+        << "A's stale array bound must not leak into B's output";
+
+    // Codegen indentation is not part of the documented reset contract
+    // because generate_vhdl() calls emit_init() as its own first line,
+    // resetting indentation unconditionally on every invocation. Confirm
+    // that guarantee holds: B's library clause starts at column zero, not
+    // indented as if it were still nested inside A's last construct.
+    EXPECT_NE(vhdl_b.find("\nlibrary IEEE;"), std::string::npos)
+        << "generate_vhdl()'s internal emit_init() call must reset "
+           "indentation to zero without a separate manual reset";
+}
