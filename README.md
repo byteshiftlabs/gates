@@ -3,6 +3,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Language: C11](https://img.shields.io/badge/Language-C11-blue.svg)
 ![Build: CMake](https://img.shields.io/badge/Build-CMake_3.14+-orange.svg)
+![CI](https://github.com/byteshiftlabs/gates/actions/workflows/ci.yml/badge.svg)
 
 Minimal C subset → VHDL translator.
 
