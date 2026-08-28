@@ -20,6 +20,12 @@ Tests are organized by their purpose and scope:
 
   * ``integration_tests.cpp``: Component boundary tests, end-to-end smoke tests, negative tests, and VHDL validation
 
+**CLI Tests** (``tests/cli/``):
+  Fixtures exercised by invoking the ``gates`` binary itself, registered directly as CTest cases in ``CMakeLists.txt`` rather than as GoogleTest cases:
+
+  * ``too_many_params.c``: parameter list exceeding ``GATES_MAX_PARAMETERS``, asserts a non-zero exit status
+  * a plain directory path, asserts directory input is rejected instead of reported as success
+
 Each test file begins with a doxygen header (``@file``, ``@brief``) documenting what is tested.
 
 Quick Start
