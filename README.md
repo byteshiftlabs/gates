@@ -7,10 +7,6 @@
 
 Minimal C subset → VHDL translator.
 
-> **Status: pre-release.** Gates parses a useful subset of C and emits VHDL, but
-> the generated output is not yet reliably analyzable by a VHDL toolchain. See
-> [Current Limitations](#current-limitations) before using it for anything real.
-
 > **Disclosure:** This software was developed with AI assistance under human supervision.
 
 ## Quick Start
