@@ -42,7 +42,6 @@ All contributions must meet these standards before merging:
 - Consistent formatting and structure throughout
 - No dead code or unused imports
 - No code duplication — extract shared logic into reusable functions (3+ occurrences)
-- No file exceeds 500 lines
 - Complex logic has comments explaining "why", not "what"
 - Code compiles with `-Wall -Wextra -Wpedantic` and zero warnings
 - All tests pass before submitting (`./run_tests.sh`)
