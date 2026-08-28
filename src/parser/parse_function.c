@@ -57,6 +57,15 @@ static void parse_function_parameters(ParserContext *ctx, ASTNode *function_node
     
     while (!match(ctx, TOKEN_PARENTHESIS_CLOSE) && !match(ctx, TOKEN_EOF) && !has_errors()) {
         if (match(ctx, TOKEN_KEYWORD)) {
+            // `void` as a parameter type only appears in C to spell an empty
+            // parameter list, e.g. `int f(void)`. It is never a real
+            // parameter (a `void`-typed parameter is invalid C), so consume
+            // it without expecting a following name.
+            if (strcmp(ctx->current_token.value, "void") == 0) {
+                advance(ctx);
+                break;
+            }
+
             Token parameter_type = (Token){0};
             ASTNode *parameter_node = parse_single_parameter(ctx, &parameter_type);
             if (!parameter_node) {

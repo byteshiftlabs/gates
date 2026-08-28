@@ -262,6 +262,17 @@ TEST_F(EndToEndTest, VoidFunction) {
 }
 
 // -------------------------------------------------------------------
+// `void` as an empty parameter list
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, VoidParameterListProducesNoPorts) {
+    const char *src = "int getval(void) { return 1; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+    EXPECT_NE(vhdl.find("entity"), std::string::npos);
+    EXPECT_EQ(vhdl.find("void"), std::string::npos);
+}
+
+// -------------------------------------------------------------------
 // IEEE library inclusion
 // -------------------------------------------------------------------
 TEST_F(EndToEndTest, IEEELibraryIncluded) {
@@ -472,6 +483,23 @@ TEST_F(NegativeTest, InvalidCyntaxReturnsNull) {
         free_node(program);
     }
     EXPECT_GT(get_error_count(), 0) << "Error should be logged for invalid syntax";
+}
+
+TEST_F(NegativeTest, VoidFollowedByParameterIsRejected) {
+    const char *invalid_src = "int func(void, int x) { return x; }"; // void must be the sole parameter
+    FILE *fin = tmpfile();
+    ASSERT_NE(fin, nullptr) << "tmpfile() failed";
+
+    fwrite(invalid_src, 1, strlen(invalid_src), fin);
+    rewind(fin);
+
+    ASTNode *program = parse_program(fin);
+    fclose(fin);
+
+    if (program) {
+        free_node(program);
+    }
+    EXPECT_GT(get_error_count(), 0) << "Error should be logged for void followed by another parameter";
 }
 
 TEST_F(NegativeTest, MissingFunctionBodyReturnsNull) {
