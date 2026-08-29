@@ -102,7 +102,7 @@ void generate_binary_expression(ASTNode *node, void (*node_generator)(ASTNode*))
         node_generator(left_operand);
         emit_raw("), to_integer(unsigned(");
         node_generator(right_operand);
-        emit_raw(")))))");
+        emit_raw("))))");
         return;
     }
     
@@ -112,7 +112,7 @@ void generate_binary_expression(ASTNode *node, void (*node_generator)(ASTNode*))
         node_generator(left_operand);
         emit_raw("), to_integer(unsigned(");
         node_generator(right_operand);
-        emit_raw(")))))");
+        emit_raw("))))");
         return;
     }
 
