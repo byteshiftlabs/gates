@@ -35,8 +35,11 @@ Severity levels:
 
 Categories: ``General``, ``Lexer``, ``Parser``, ``Semantic``, ``Codegen``.
 
-Colors are enabled by default on terminals that support ANSI escape codes
-(red for errors, yellow for warnings, blue for info).
+Colors are on unconditionally by default (red for errors, yellow for
+warnings, green for info) — there is no terminal detection, so piping stderr
+to a file or another program still embeds raw ANSI escape codes in it.
+Programmatic callers of the error handler can call ``set_colored_output(0)``
+to disable this; the CLI itself never does.
 
 Examples
 --------

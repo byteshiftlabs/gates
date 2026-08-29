@@ -245,6 +245,17 @@ Public API Functions
 Extended Reporting
 ------------------
 
+.. note::
+   ``report_message_ex()``, ``add_error_hint()``, and ``add_suggestion()`` are
+   implemented and unit-tested (``tests/unit/test_error_handler.cpp``), but no
+   real parser or codegen diagnostic calls them yet — every actual compiler
+   error currently goes through the plain ``log_error()``/``log_warning()``
+   form below, so a `gates` compile error today never shows an error code,
+   hint, suggestion, or source-context caret. This section documents the API
+   as it exists, available for a diagnostic to opt into, not as gates'
+   current default behavior; see :doc:`../usage` for the output format a user
+   actually sees.
+
 report_message_ex()
 ~~~~~~~~~~~~~~~~~~~
 
