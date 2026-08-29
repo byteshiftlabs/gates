@@ -26,6 +26,16 @@ Tests are organized by their purpose and scope:
   * ``too_many_params.c``: parameter list exceeding ``GATES_MAX_PARAMETERS``, asserts a non-zero exit status
   * a plain directory path, asserts directory input is rejected instead of reported as success
 
+**Documentation Example Tests** (``examples/doc/``):
+  :doc:`examples` pulls its C and VHDL snippets in verbatim via Sphinx's
+  ``literalinclude``, from ``examples/doc/*.c`` and the matching golden
+  ``examples/doc/*.vhdl``. The ``docs_examples_match_current_codegen`` CTest
+  case (``tools/check_doc_examples.sh``) recompiles each ``.c`` file with the
+  current build and fails if the result no longer matches the checked-in
+  ``.vhdl``, or — when ``ghdl`` is installed — no longer analyzes cleanly
+  with ``ghdl -a --std=93``. This makes the examples page structurally unable
+  to drift from what ``gates`` actually produces.
+
 Each test file begins with a doxygen header (``@file``, ``@brief``) documenting what is tested.
 
 Quick Start
