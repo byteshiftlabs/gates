@@ -2,8 +2,13 @@ Examples
 ========
 
 This section shows example C files and their actual generated VHDL output.
-Every snippet below was compiled with the current build and pasted in
-verbatim — none are hand-written or aspirational.
+Every snippet below was produced by compiling the shown C with the current
+build and pasting the result in verbatim — none are hand-written or
+aspirational. Each one was also analyzed with ``ghdl -a --std=93`` (GHDL
+1.0.0) and accepted with no errors, so this isn't just "gates produced this
+text" — a real VHDL analyzer parses and elaborates it. That doesn't
+generalize to arbitrary input: see :doc:`known_issues` for constructs (like
+cross-function calls) known to produce output an analyzer will reject.
 
 The ``examples/`` folder in the repository contains additional input files.
 
