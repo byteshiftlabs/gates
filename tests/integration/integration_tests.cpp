@@ -19,6 +19,7 @@ extern "C" {
 #include "symbol_structs.h"
 #include "config.h"
 }
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -237,6 +238,24 @@ TEST_F(EndToEndTest, BinaryOperators) {
     ASSERT_FALSE(vhdl.empty());
     // VHDL should contain the addition
     EXPECT_NE(vhdl.find("+"), std::string::npos);
+}
+
+// -------------------------------------------------------------------
+// Shift operators used to emit one stray closing parenthesis, which no
+// VHDL analyzer would accept. A plain substring check ("shift_left" is
+// present) would not have caught this, since the text was still there --
+// only a paren-balance count exposes the defect.
+// -------------------------------------------------------------------
+TEST_F(EndToEndTest, ShiftOperatorsProduceBalancedParentheses) {
+    const char *src = "int shifts(int a, int b) { int c = a << b; int d = a >> b; return c + d; }";
+    std::string vhdl = translate(src);
+    ASSERT_FALSE(vhdl.empty());
+    EXPECT_NE(vhdl.find("shift_left"), std::string::npos);
+    EXPECT_NE(vhdl.find("shift_right"), std::string::npos);
+
+    long open_count = std::count(vhdl.begin(), vhdl.end(), '(');
+    long close_count = std::count(vhdl.begin(), vhdl.end(), ')');
+    EXPECT_EQ(open_count, close_count) << "Unbalanced parentheses in generated VHDL";
 }
 
 // -------------------------------------------------------------------
