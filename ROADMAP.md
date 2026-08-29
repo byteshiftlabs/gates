@@ -81,6 +81,12 @@ these; each produced output a VHDL analyzer rejects.
 ### Control flow
 - [ ] `switch/case` — maps directly to VHDL `case`
 - [ ] `do-while` — VHDL loop with the exit condition at the bottom
+- [ ] `i++` / `i--` and compound assignment (`+=`, `-=`, `*=`, etc.) as
+      statements outside a `for` header — the desugaring to plain assignment
+      already exists for the `for`-increment clause (`parse_for_increment` in
+      `parse_for.c`); it needs generalizing to statement position, plus
+      tokenizing the compound-assignment operators, which the lexer does not
+      recognize as single tokens today
 
 ### Pointers
 - [ ] Address-of (`&`) and dereference (`*`) in expressions
