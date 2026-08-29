@@ -4,24 +4,40 @@ VHDL Code Generator
 Overview
 --------
 
-The VHDL code generator is the final phase of the compiler. It traverses the AST and emits synthesizable VHDL code that implements the C program's behavior in hardware. The generator is implemented in the ``src/codegen/`` module (split across ``codegen_vhdl_main.c``, ``codegen_vhdl_expressions.c``, ``codegen_vhdl_statements.c``, ``codegen_vhdl_helpers.c``, ``codegen_vhdl_types.c``, and ``codegen_vhdl_constants.c``).
+The VHDL code generator is the final phase of the compiler. It traverses the AST and emits synthesizable VHDL code that implements the C program's behavior in hardware. The generator is implemented in the ``src/codegen/`` module, split across ``codegen_vhdl_main.c``, ``codegen_vhdl_expressions.c``, ``codegen_vhdl_statements.c``, ``codegen_vhdl_helpers.c``, ``codegen_vhdl_types.c``, and ``codegen_vhdl_constants.c``.
 
 **Key responsibilities:**
 
 * Convert C functions to VHDL entities with synchronous processes
-* Map C types to VHDL types (``int`` → ``std_logic_vector(31 downto 0)``)
-* Translate C operators to VHDL equivalents (``==`` → ``=``, ``!=`` → ``/=``)
-* Generate VHDL records for C structs
+* Map C types to VHDL types (``int`` -> ``std_logic_vector(31 downto 0)``)
+* Translate C operators to VHDL equivalents (``==`` -> ``=``, ``!=`` -> ``/=``)
+* Generate VHDL record types (inside a package) for C structs
 * Handle arrays with VHDL array types
 * Convert control flow to VHDL constructs (``if``/``elsif``/``else``, ``while`` loops, ``for`` loops rewritten as ``while``)
-* Emit signals for local variables
-* Generate proper VHDL signal assignments with type conversions
+* Emit signals for local variables, with reset assignments for each
+* Generate VHDL signal assignments with type conversions
 
 Location
 --------
 
-- Source file: the ``src/codegen/`` module (split across ``codegen_vhdl_main.c``, ``codegen_vhdl_expressions.c``, ``codegen_vhdl_statements.c``, ``codegen_vhdl_helpers.c``, ``codegen_vhdl_types.c``, and ``codegen_vhdl_constants.c``)
-- Header file: ``include/codegen_vhdl.h``
+- Source: ``src/codegen/codegen_vhdl_main.c``, ``codegen_vhdl_expressions.c``, ``codegen_vhdl_statements.c``, ``codegen_vhdl_helpers.c``, ``codegen_vhdl_types.c``, ``codegen_vhdl_emit.c``, ``codegen_vhdl_constants.c``
+- Headers: ``include/codegen_vhdl.h`` (public entry point), plus one header per ``.c`` file above under ``src/codegen/``
+
+Output emission
+---------------
+
+The generator does not thread a ``FILE *`` through every function call. ``codegen_vhdl_emit.c`` holds the output file and current indentation level as module-private state, set once by ``emit_init()``:
+
+.. code-block:: c
+
+   void emit_init(FILE *output_file);   // stores the file, resets indentation to 0
+   void emit_raw(const char *fmt, ...); // vfprintf to the stored file, no indent
+   void emit_line(const char *fmt, ...);   // indent, vfprintf, trailing newline
+   void emit_indented(const char *fmt, ...); // indent, vfprintf, no newline
+   void emit_indent_inc(void);
+   void emit_indent_dec(void);
+
+Every emitter in the other codegen files calls these instead of ``fprintf`` directly.
 
 Code Generation Entry Point
 ----------------------------
@@ -31,20 +47,12 @@ generate_vhdl()
 
 .. code-block:: c
 
-   void generate_vhdl(ASTNode *root, FILE *output_file);
-
-The public API function that initiates VHDL generation. It delegates to the internal dispatcher ``generate_node()``:
-
-.. code-block:: c
-
    void generate_vhdl(ASTNode *root, FILE *output_file) {
-       generate_node(root, output_file);
+       emit_init(output_file);
+       generate_node(root);
    }
 
-**Parameters:**
-
-* ``root``: AST root node (typically ``NODE_PROGRAM``)
-* ``out``: Output file stream for VHDL code
+The public API function that initiates VHDL generation (``include/codegen_vhdl.h``). It resets the emitter state for the file and delegates to the internal dispatcher ``generate_node()``.
 
 Node Dispatcher
 ---------------
@@ -52,31 +60,31 @@ Node Dispatcher
 generate_node()
 ~~~~~~~~~~~~~~~
 
-Internal function that dispatches to specialized generators based on node type:
+Internal function (``codegen_vhdl_main.c``) that dispatches to specialized generators based on node type:
 
 .. code-block:: c
 
-   static void generate_node(ASTNode *node, FILE *output_file) {
+   static void generate_node(ASTNode *node) {
        if (!node) return;
-       
+
        switch (node->type) {
-           case NODE_PROGRAM:          generate_program(node, output_file); break;
-           case NODE_FUNCTION_DECL:    generate_function_declaration(node, output_file); break;
-           case NODE_STATEMENT:        generate_statement_block(node, output_file, generate_node); break;
-           case NODE_WHILE_STATEMENT:  generate_while_loop(node, output_file, generate_node); break;
-           case NODE_FOR_STATEMENT:    generate_for_loop(node, output_file, generate_node); break;
-           case NODE_IF_STATEMENT:     generate_if_statement(node, output_file, generate_node); break;
-           case NODE_BREAK_STATEMENT:  generate_break_statement(node, output_file); break;
-           case NODE_CONTINUE_STATEMENT: generate_continue_statement(node, output_file); break;
-           case NODE_BINARY_EXPR:      generate_binary_expression(node, output_file, generate_node); break;
-           case NODE_BINARY_OP:        generate_unary_operation(node, output_file, generate_node); break;
-           case NODE_EXPRESSION:       generate_expression(node, output_file); break;
-           case NODE_FUNC_CALL:        generate_function_call(node, output_file, generate_node); break;
+           case NODE_PROGRAM:            generate_program(node); break;
+           case NODE_FUNCTION_DECL:      generate_function_declaration(node); break;
+           case NODE_STATEMENT:          generate_statement_block(node, generate_node); break;
+           case NODE_WHILE_STATEMENT:    generate_while_loop(node, generate_node); break;
+           case NODE_FOR_STATEMENT:      generate_for_loop(node, generate_node); break;
+           case NODE_IF_STATEMENT:       generate_if_statement(node, generate_node); break;
+           case NODE_BREAK_STATEMENT:    generate_break_statement(node); break;
+           case NODE_CONTINUE_STATEMENT: generate_continue_statement(node); break;
+           case NODE_BINARY_EXPR:        generate_binary_expression(node, generate_node); break;
+           case NODE_BINARY_OP:          generate_unary_operation(node, generate_node); break;
+           case NODE_EXPRESSION:         generate_expression(node); break;
+           case NODE_FUNC_CALL:          generate_function_call(node, generate_node); break;
            default: /* intentionally ignored */ break;
        }
    }
 
-**Design:** Uses a central switch-based dispatcher. Node types that do not directly produce VHDL output are handled in the relevant higher-level generators (for example, ``NODE_VAR_DECL`` is handled within statement generation).
+**Design:** a central switch-based dispatcher, passed to the lower-level generators as a function pointer (``void (*node_generator)(ASTNode*)``) so they can recurse into sub-expressions without each one depending on ``generate_node`` directly. Node types that do not directly produce VHDL output are handled inside the relevant higher-level generator — for example ``NODE_VAR_DECL`` is handled inside ``generate_statement_block()``, not dispatched here.
 
 Program Generation
 ------------------
@@ -84,48 +92,26 @@ Program Generation
 generate_program()
 ~~~~~~~~~~~~~~~~~~
 
-Generates VHDL preamble and processes all top-level functions:
+Emits the VHDL header comment, the struct package (if any structs were declared), then generates each top-level function:
 
 .. code-block:: c
 
-   static void generate_program(ASTNode *node, FILE *output_file) {
-       // Emit VHDL header
-       fprintf(output_file, "-- VHDL generated by gates \n\n");
-       fprintf(output_file, "library IEEE;\n");
-       fprintf(output_file, "use IEEE.STD_LOGIC_1164.ALL;\n");
-       fprintf(output_file, "use IEEE.NUMERIC_STD.ALL;\n\n");
-       
-       // Emit struct type declarations
-       emit_all_struct_declarations(output_file);
-       
-       // Generate each function
-       for (int i = 0; i < node->num_children; ++i) {
-           generate_node(node->children[i], output_file);
+   static void generate_program(ASTNode *node) {
+       emit_line("-- VHDL generated by gates");
+       emit_newline();
+
+       emit_all_struct_declarations();
+
+       for (int child_index = 0; child_index < node->num_children; ++child_index) {
+           generate_node(node->children[child_index]);
        }
    }
 
 **Output structure:**
 
 1. Comment header identifying gates-generated code
-2. IEEE library imports (``STD_LOGIC_1164``, ``NUMERIC_STD``)
-3. VHDL record type definitions for C structs
-4. Entity and architecture for each C function
-
-**Example output:**
-
-.. code-block:: vhdl
-
-   -- VHDL generated by gates 
-   
-   library IEEE;
-   use IEEE.STD_LOGIC_1164.ALL;
-   use IEEE.NUMERIC_STD.ALL;
-   
-   -- Struct Point as VHDL record
-   type Point_t is record
-     x : std_logic_vector(31 downto 0);
-     y : std_logic_vector(31 downto 0);
-   end record;
+2. If any struct was declared: a package (see `Struct Support`_ below) with its own ``library``/``use`` clauses
+3. Entity and architecture for each C function, each with its own ``library``/``use`` clauses (VHDL context clauses apply only to the design unit immediately following them, so every design unit repeats them)
 
 Function Generation
 -------------------
@@ -133,70 +119,11 @@ Function Generation
 generate_function_declaration()
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Converts C function to VHDL entity + architecture:
+Converts a C function into a VHDL entity + architecture pair (``codegen_vhdl_main.c``). It first walks the function's ``NODE_VAR_DECL`` children to collect parameters (bounded by ``GATES_MAX_PARAMETERS``, reported as a codegen error if exceeded), then calls ``emit_entity_declaration()`` followed by ``emit_architecture()``.
 
-.. code-block:: c
+``emit_entity_declaration()`` emits the ``library``/``use`` clauses, the entity's ``clk``/``reset`` ports, one input port per parameter (mapped through ``emit_mapped_signal_name()`` — see `Reserved names`_), and the ``result`` output port, typed from the return type via ``ctype_to_vhdl()`` (or ``<name>_t`` for a struct return).
 
-   static void generate_function_declaration(ASTNode *node, FILE *output_file) {
-       const char *fname = node->value;
-       
-       // Collect parameters (NODE_VAR_DECL children)
-       ASTNode *params[128] = {0};
-       int pcount = 0;
-       for (int i = 0; i < node->num_children; ++i) {
-           if (node->children[i]->type == NODE_VAR_DECL) {
-               params[pcount++] = node->children[i];
-           }
-       }
-       
-       // ENTITY DECLARATION
-       fprintf(output_file, "-- Function: %s\n", fname);
-       fprintf(output_file, "entity %s is\n", fname);
-       fprintf(output_file, "  port (\n");
-       fprintf(output_file, "    clk   : in  std_logic;\n");
-       fprintf(output_file, "    reset : in  std_logic;\n");
-       
-       // Input ports for parameters
-       for (int i = 0; i < pcount; ++i) {
-           ASTNode *p = params[i];
-           int is_struct = find_struct_index(p->token.value) >= 0;
-           if (is_struct) {
-               fprintf(output_file, "    %s : in %s_t;\n", p->value, p->token.value);
-           } else {
-               fprintf(output_file, "    %s : in %s;\n", p->value, ctype_to_vhdl(p->token.value));
-           }
-       }
-       
-       // Output port for return value
-       if (find_struct_index(node->token.value) >= 0) {
-           fprintf(output_file, "    result : out %s_t\n", node->token.value);
-       } else {
-           fprintf(output_file, "    result : out %s\n", ctype_to_vhdl(node->token.value));
-       }
-       
-       fprintf(output_file, "  );\nend entity;\n\n");
-       
-       // ARCHITECTURE
-       fprintf(output_file, "architecture behavioral of %s is\n", fname);
-       emit_local_signals(node, output_file);  // Local variable signals
-       fprintf(output_file, "begin\n");
-       fprintf(output_file, "  process(clk, reset)\n");
-       fprintf(output_file, "  begin\n");
-       fprintf(output_file, "    if reset = '1' then\n");
-       fprintf(output_file, "      -- Reset logic (user-defined)\n");
-       fprintf(output_file, "    elsif rising_edge(clk) then\n");
-       
-       // Function body
-       for (int i = 0; i < node->num_children; ++i) {
-           if (node->children[i]->type == NODE_STATEMENT) {
-               generate_node(node->children[i], output_file);
-           }
-       }
-       
-       fprintf(output_file, "    end if;\n");
-       fprintf(output_file, "  end process;\n");
-       fprintf(output_file, "end architecture;\n\n");
-   }
+``emit_architecture()`` emits the local signal declarations (`Local Signals and Reset`_), then a single clocked ``process(clk, reset)`` with a reset branch and a ``rising_edge(clk)`` branch that holds the function body's statements.
 
 **C to VHDL mapping:**
 
@@ -205,22 +132,19 @@ C construct            VHDL equivalent
 ====================== ================================
 Function declaration   Entity + Architecture
 Function parameters    Entity input ports
-Return value           Entity output port ``result``
-Local variables        Signals declared in architecture
-Function body          Synchronous process (clocked)
+Return value            Entity output port ``result``
+Local variables         Signals declared in architecture
+Function body           Synchronous process (clocked)
 ====================== ================================
 
-**Example:**
-
-C code:
+**Example** (verified against the current build):
 
 .. code-block:: c
 
    int add(int a, int b) {
-       return a + b;
+       int sum = a + b;
+       return sum;
    }
-
-Generated VHDL:
 
 .. code-block:: vhdl
 
@@ -234,18 +158,22 @@ Generated VHDL:
        result : out std_logic_vector(31 downto 0)
      );
    end entity;
-   
+
    architecture behavioral of add is
+     signal sum : std_logic_vector(31 downto 0);
    begin
      process(clk, reset)
      begin
        if reset = '1' then
-         -- Reset logic
+         sum <= (others => '0');
        elsif rising_edge(clk) then
-         result <= unsigned(a) + unsigned(b);
+         sum <= std_logic_vector(unsigned(a) + unsigned(b));
+         result <= sum;
        end if;
      end process;
    end architecture;
+
+Note the reset branch assigns every local signal to zero — it is generated per signal by ``emit_function_reset_logic()``, not a placeholder comment. Note also that arithmetic operands are wrapped in ``unsigned(...)`` and the whole expression in ``std_logic_vector(...)`` — see `Expression Generation`_.
 
 Type Conversion
 ---------------
@@ -253,24 +181,19 @@ Type Conversion
 ctype_to_vhdl()
 ~~~~~~~~~~~~~~~
 
-Maps C types to VHDL types (defined in ``src/codegen/codegen_vhdl_helpers.c``):
+Maps C type names to VHDL type strings (``codegen_vhdl_helpers.c``, backed by constants in ``codegen_vhdl_constants.c``):
 
 .. code-block:: c
 
    const char* ctype_to_vhdl(const char* ctype) {
-       if (strcmp(ctype, "int") == 0) {
-           return "std_logic_vector(31 downto 0)";
-       } else if (strcmp(ctype, "float") == 0) {
-           return "std_logic_vector(31 downto 0)";
-       } else if (strcmp(ctype, "double") == 0) {
-           return "std_logic_vector(63 downto 0)";
-       } else if (strcmp(ctype, "char") == 0) {
-           return "std_logic_vector(7 downto 0)";
-       }
-       return "std_logic_vector(31 downto 0)";  // Default
+       if (strcmp(ctype, C_TYPE_INT) == 0)    return VHDL_TYPE_INT;
+       if (strcmp(ctype, C_TYPE_FLOAT) == 0)  return VHDL_TYPE_FLOAT;
+       if (strcmp(ctype, C_TYPE_DOUBLE) == 0) return VHDL_TYPE_DOUBLE;
+       if (strcmp(ctype, C_TYPE_CHAR) == 0)   return VHDL_TYPE_CHAR;
+       return VHDL_TYPE_DEFAULT;
    }
 
-**Type mapping table:**
+**Type mapping table** (``codegen_vhdl_constants.c``):
 
 ============= ================================
 C type        VHDL type
@@ -283,7 +206,7 @@ C type        VHDL type
 ============= ================================
 
 .. note::
-   Floating-point types (``float``, ``double``) are mapped to ``std_logic_vector`` for bit manipulation, not true floating-point VHDL types.
+   ``float`` is mapped to the same 32-bit ``std_logic_vector`` as ``int`` for now — a bit-level placeholder, not IEEE 754 floating point.
 
 Statement Generation
 --------------------
@@ -291,58 +214,41 @@ Statement Generation
 generate_statement_block()
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Processes statement nodes and delegates to specific handlers:
+Dispatches each child of a ``NODE_STATEMENT`` to its VHDL equivalent (``codegen_vhdl_statements.c``):
 
 .. code-block:: c
 
-   static void generate_statement_block(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*)) {
-       for (int i = 0; i < node->num_children; ++i) {
-           ASTNode *child = node->children[i];
-           
+   void generate_statement_block(ASTNode *node, void (*node_generator)(ASTNode*)) {
+       for (int child_index = 0; child_index < node->num_children; ++child_index) {
+           ASTNode *child = node->children[child_index];
            switch (child->type) {
                case NODE_VAR_DECL:
-                   // Handle variable declarations with initialization
-                   // ...struct init or array init or simple init
+                   // struct-field init, plain init, or no initializer at all
                    break;
-               
                case NODE_ASSIGNMENT:
-                   emit_assignment(child, output_file, "      ");
+                   emit_variable_assignment(child, node_generator);
                    break;
-               
                case NODE_IF_STATEMENT:
                case NODE_WHILE_STATEMENT:
                case NODE_FOR_STATEMENT:
                case NODE_BREAK_STATEMENT:
                case NODE_CONTINUE_STATEMENT:
-                   generate_node(child, output_file);
+                   node_generator(child);
                    break;
-               
                case NODE_EXPRESSION:
                case NODE_BINARY_EXPR:
-                   // Return statement or standalone expression
-                   fprintf(output_file, "      result <= ");
-                   generate_node(child, output_file);
-                   fprintf(output_file, ";\n");
+               case NODE_BINARY_OP:
+               case NODE_FUNC_CALL:
+                   // return statement or a call in return position
+                   emit_expression_as_return(child, node, node_generator);
                    break;
+               default:
+                   break; // intentionally ignored
            }
        }
    }
 
-**Variable initialization handling:**
-
-For struct initialization:
-
-.. code-block:: c
-
-   if (init && init->value && strcmp(init->value, "struct_init") == 0) {
-       // Initialize each struct field
-       for (int f = 0; f < g_structs[struct_idx].field_count; ++f) {
-           const char *field = g_structs[struct_idx].fields[f].field_name;
-           const char *val = (f < init->num_children) ? init->children[f]->value : "0";
-           fprintf(output_file, "      %s.%s <= to_unsigned(%s, 32);\n", 
-                   child->value, field, val);
-       }
-   }
+A struct-typed local variable initialized from ``struct_init`` is expanded field-by-field by ``emit_struct_field_initializations()``, since VHDL records cannot be assigned from an aggregate literal the way C struct initializers can.
 
 Control Flow Generation
 -----------------------
@@ -350,165 +256,72 @@ Control Flow Generation
 If Statements
 ~~~~~~~~~~~~~
 
-.. code-block:: c
+``generate_if_statement()`` (``codegen_vhdl_statements.c``) emits ``if ... then``, walks ``NODE_ELSE_IF_STATEMENT``/``NODE_ELSE_STATEMENT`` children as ``elsif``/``else``, and closes with ``end if;``. The condition is passed through ``emit_conditional_expression()`` (`Conditions`_ below).
 
-   static void generate_if_statement(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*)) {
-       ASTNode *cond = node->children[0];
-       
-       fprintf(output_file, "      if ");
-       emit_condition(cond, output_file);
-       fprintf(output_file, " then\n");
-       
-       // Process if body and else-if/else clauses
-       for (int j = 1; j < node->num_children; ++j) {
-           ASTNode *branch = node->children[j];
-           if (branch->type == NODE_ELSE_IF_STATEMENT) {
-               ASTNode *elseif_cond = branch->children[0];
-               fprintf(output_file, "      elsif ");
-               emit_condition(elseif_cond, output_file);
-               fprintf(output_file, " then\n");
-               for (int k = 1; k < branch->num_children; ++k) {
-                   generate_node(branch->children[k], output_file);
-               }
-           } else if (branch->type == NODE_ELSE_STATEMENT) {
-               fprintf(output_file, "      else\n");
-               for (int k = 0; k < branch->num_children; ++k) {
-                   generate_node(branch->children[k], output_file);
-               }
-           } else {
-               generate_node(branch, output_file);
-           }
-       }
-       fprintf(output_file, "      end if;\n");
-   }
-
-**C to VHDL mapping:**
+**Example:**
 
 .. code-block:: c
 
    if (x > 0) {
        y = 1;
    } else if (x < 0) {
-       y = -1;
+       y = 0 - 1;
    } else {
        y = 0;
    }
 
-↓
-
 .. code-block:: vhdl
 
    if unsigned(x) > to_unsigned(0, 32) then
-     y <= to_unsigned(1, 32);
+     y <= std_logic_vector(to_unsigned(1, 32));
    elsif unsigned(x) < to_unsigned(0, 32) then
-     y <= to_signed(-1, 32);
+     y <= std_logic_vector(to_unsigned(0, 32) - to_unsigned(1, 32));
    else
-     y <= to_unsigned(0, 32);
+     y <= std_logic_vector(to_unsigned(0, 32));
    end if;
 
 While Loops
 ~~~~~~~~~~~
 
-.. code-block:: c
-
-   static void generate_while_loop(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*)) {
-       ASTNode *cond = node->children[0];
-       
-       fprintf(output_file, "      while ");
-       emit_condition(cond, output_file);
-       fprintf(output_file, " loop\n");
-       
-       for (int j = 1; j < node->num_children; ++j) {
-           generate_node(node->children[j], output_file);
-       }
-       
-       fprintf(output_file, "      end loop;\n");
-   }
+``generate_while_loop()`` maps a C ``while`` directly onto a VHDL ``while ... loop`` / ``end loop;``, with the condition through ``emit_conditional_expression()``.
 
 **Example:**
 
-C code:
-
 .. code-block:: c
 
-   while (i < 10) {
+   while (i < n) {
        sum = sum + i;
        i = i + 1;
    }
 
-VHDL output:
-
 .. code-block:: vhdl
 
-   while unsigned(i) < to_unsigned(10, 32) loop
-     sum <= unsigned(sum) + unsigned(i);
-     i <= unsigned(i) + to_unsigned(1, 32);
+   while unsigned(i) < unsigned(n) loop
+     sum <= std_logic_vector(unsigned(sum) + unsigned(i));
+     i <= std_logic_vector(unsigned(i) + to_unsigned(1, 32));
    end loop;
 
 For Loops (Converted to While)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For loops are rewritten as while loops with initialization and increment:
+``generate_for_loop()`` has no direct VHDL equivalent to reach for, so it decomposes the C ``for`` into: the init clause emitted before the loop (if present), a ``while`` loop over the condition, the body statements, and the increment emitted as the last statement inside the loop body. The parser has already desugared ``i++``/``i--`` into an assignment by the time this runs (see :doc:`parser`), so this function only ever sees plain ``NODE_ASSIGNMENT``/``NODE_VAR_DECL`` nodes for init and increment.
+
+**Example:**
 
 .. code-block:: c
 
-   static void generate_for_loop(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*)) {
-       // Extract init, condition, increment from for loop children
-       int cond_index = 0;
-       ASTNode *first = node->children[0];
-       
-       // Check if first child is init statement (var decl or assignment)
-       if (first->type == NODE_ASSIGNMENT || first->type == NODE_VAR_DECL) {
-           emit_assignment(first, output_file, "      ");  // or emit_initializer
-           cond_index = 1;
-       }
-       
-       ASTNode *cond = node->children[cond_index];
-       
-       // Find increment (last child, if it's an assignment)
-       int incr_index = node->num_children - 1;
-       ASTNode *incr = NULL;
-       if (node->children[incr_index]->type == NODE_ASSIGNMENT) {
-           incr = node->children[incr_index];
-       }
-       
-       // Emit while loop
-       fprintf(output_file, "      while ");
-       emit_condition(cond, output_file);
-       fprintf(output_file, " loop\n");
-       
-       // Loop body (skip initialization and increment)
-       for (int j = cond_index + 1; j < node->num_children; ++j) {
-           if (j == incr_index) continue;  // Skip increment here
-           generate_node(node->children[j], output_file);
-       }
-       
-       // Emit increment at end of loop body
-       if (incr) {
-           emit_assignment(incr, output_file, "        ");
-       }
-       
-       fprintf(output_file, "      end loop;\n");
-   }
-
-**Example transformation:**
-
-C code:
-
-.. code-block:: c
-
-   for (int i = 0; i < 10; i++) {
+   int sum = 0;
+   for (int i = 0; i < n; i = i + 1) {
        sum = sum + i;
    }
 
-VHDL output:
-
 .. code-block:: vhdl
 
-   i <= to_unsigned(0, 32);
-   while unsigned(i) < to_unsigned(10, 32) loop
-     sum <= unsigned(sum) + unsigned(i);
-     i <= unsigned(i) + to_unsigned(1, 32);
+   sum <= std_logic_vector(to_unsigned(0, 32));
+   i <= std_logic_vector(to_unsigned(0, 32));
+   while unsigned(i) < unsigned(n) loop
+     sum <= std_logic_vector(unsigned(sum) + unsigned(i));
+     i <= std_logic_vector(unsigned(i) + to_unsigned(1, 32));
    end loop;
 
 Break and Continue
@@ -516,18 +329,13 @@ Break and Continue
 
 .. code-block:: c
 
-   static void generate_break_statement(ASTNode *node, FILE *output_file) { 
-       fprintf(output_file, "      exit;\n"); 
-   }
-   
-   static void generate_continue_statement(ASTNode *node, FILE *output_file) { 
-       fprintf(output_file, "      next;\n"); 
-   }
+   void generate_break_statement(ASTNode *node)    { (void)node; emit_line("exit;"); }
+   void generate_continue_statement(ASTNode *node) { (void)node; emit_line("next;"); }
 
-**Mapping:**
+* C ``break`` -> VHDL ``exit``
+* C ``continue`` -> VHDL ``next``
 
-* C ``break`` → VHDL ``exit``
-* C ``continue`` → VHDL ``next``
+The parser rejects ``break``/``continue`` outside a loop before codegen ever sees them (``parse_control_flow.c``), so these two functions never need to check loop depth themselves.
 
 Expression Generation
 ---------------------
@@ -535,86 +343,7 @@ Expression Generation
 Binary Expressions
 ~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-   static void generate_binary_expression(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*)) {
-       const char *op = node->value;
-       ASTNode *left = node->children[0];
-       ASTNode *right = node->children[1];
-       
-       // Normalize operators
-       if (strcmp(op, "==") == 0) op = "=";
-       else if (strcmp(op, "!=") == 0) op = "/=";
-       
-       // Handle logical short-circuit operators
-       if (strcmp(node->value, "&&") == 0 || strcmp(node->value, "||") == 0) {
-           emit_boolean_gate(left, right, 
-               strcmp(node->value, "&&") == 0 ? " and " : " or ", output_file);
-           return;
-       }
-       
-       // Comparison operators (produce boolean results)
-       if (strcmp(op, "=") == 0 || strcmp(op, "/=") == 0 || 
-           strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
-           strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) {
-           // Convert both sides to unsigned for comparison
-           fprintf(output_file, "unsigned(");
-           generate_node(left, output_file);
-           fprintf(output_file, ") %s unsigned(", op);
-           generate_node(right, output_file);
-           fprintf(output_file, ")");
-           return;
-       }
-       
-       // Bitwise operators
-       if (strcmp(op, "&") == 0) {
-           fprintf(output_file, "unsigned(");
-           generate_node(left, output_file);
-           fprintf(output_file, ") and unsigned(");
-           generate_node(right, output_file);
-           fprintf(output_file, ")");
-           return;
-       }
-       if (strcmp(op, "|") == 0) {
-           fprintf(output_file, "unsigned(");
-           generate_node(left, output_file);
-           fprintf(output_file, ") or unsigned(");
-           generate_node(right, output_file);
-           fprintf(output_file, ")");
-           return;
-       }
-       if (strcmp(op, "^") == 0) {
-           fprintf(output_file, "unsigned(");
-           generate_node(left, output_file);
-           fprintf(output_file, ") xor unsigned(");
-           generate_node(right, output_file);
-           fprintf(output_file, ")");
-           return;
-       }
-       
-       // Shift operators
-       if (strcmp(op, "<<") == 0) {
-           fprintf(output_file, "shift_left(unsigned(");
-           generate_node(left, output_file);
-           fprintf(output_file, "), to_integer(unsigned(");
-           generate_node(right, output_file);
-           fprintf(output_file, "))))");
-           return;
-       }
-       if (strcmp(op, ">>") == 0) {
-           fprintf(output_file, "shift_right(unsigned(");
-           generate_node(left, output_file);
-           fprintf(output_file, "), to_integer(unsigned(");
-           generate_node(right, output_file);
-           fprintf(output_file, "))))");
-           return;
-       }
-       
-       // Fallback: arithmetic operators
-       generate_node(left, output_file);
-       fprintf(output_file, " %s ", op);
-       generate_node(right, output_file);
-   }
+``generate_binary_expression()`` (``codegen_vhdl_expressions.c``) dispatches on the operator: ``&&``/``||`` become boolean AND/OR gates over each operand tested against zero; ``==``/``!=``/``<``/``<=``/``>``/``>=`` wrap both sides in typed ``unsigned()``/``signed()`` casts and compare directly; ``&``/``|``/``^`` wrap both operands in ``unsigned()`` and apply the matching VHDL bitwise operator, the whole expression wrapped in ``std_logic_vector(...)``; ``<<``/``>>`` call ``shift_left()``/``shift_right()`` from ``numeric_std``, with the shift amount converted through ``to_integer(unsigned(...))``; anything else falls through to the arithmetic case, which wraps both typed operands in ``std_logic_vector(... op ...)``.
 
 **Operator translation table:**
 
@@ -623,209 +352,63 @@ C operator          VHDL equivalent
 =================== =================================
 ``==``              ``=``
 ``!=``              ``/=``
-``<``, ``>``, etc.  Same (with ``unsigned()`` wrapping)
-``&&``              ``and`` (boolean logic)
-``||``              ``or`` (boolean logic)
-``&``               ``and`` (bitwise)
-``|``               ``or`` (bitwise)
-``^``               ``xor`` (bitwise)
-``<<``              ``shift_left(value, amount)``
-``>>``              ``shift_right(value, amount)``
-``+``, ``-``, etc.  Same (arithmetic)
+``<``, ``>``, etc.  Same, operands wrapped in ``unsigned()``/``signed()``
+``&&``              boolean AND gate over both operands tested against zero
+``||``              boolean OR gate, same shape
+``&``               ``and`` (bitwise, wrapped in ``std_logic_vector(unsigned(...) and unsigned(...))``)
+``|``               ``or``, same shape
+``^``               ``xor``, same shape
+``<<``              ``shift_left(unsigned(x), to_integer(unsigned(n)))``
+``>>``              ``shift_right(unsigned(x), to_integer(unsigned(n)))``
+``+``, ``-``, etc.  Same, operands wrapped in ``unsigned()``/``signed()``, result in ``std_logic_vector(...)``
 =================== =================================
 
 Primary Expressions
 ~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-   static void generate_expression(ASTNode *node, FILE *output_file) {
-       if (!node->value) {
-           fprintf(output_file, "unknown");
-           return;
-       }
-       
-       // Array element: arr[index]
-       if (strchr(node->value, '[')) {
-           emit_array_element(node->value, output_file);
-           return;
-       }
-       
-       // Negative literal: -42
-       if (is_negative_literal(node->value)) {
-           if (isalpha(node->value[1])) {
-               fprintf(output_file, "-unsigned(%s)", node->value + 1);
-           } else {
-               fprintf(output_file, "to_signed(%s, 32)", node->value);
-           }
-           return;
-       }
-       
-       // Struct field access: point__x → point.x
-       if (strstr(node->value, "__")) {
-           char buf[256];
-           strncpy(buf, node->value, sizeof(buf) - 1);
-           for (char *p = buf; *p; ++p) {
-               if (*p == '_' && *(p + 1) == '_') {
-                   *p = '.';
-                   memmove(p + 1, p + 2, strlen(p + 2) + 1);
-               }
-           }
-           fprintf(output_file, "%s", buf);
-           return;
-       }
-       
-       // Simple identifier or number
-       fprintf(output_file, "%s", node->value);
-   }
+``generate_expression()`` handles a leaf ``NODE_EXPRESSION`` by pattern on its stored string: a value containing ``[`` is an array access, handled by ``emit_array_element_access()``; a negative literal (leading ``-`` followed by a digit) goes through ``emit_signed_cast()``; a positive numeric literal goes through ``emit_unsigned_cast()``; anything else — a plain identifier, or a struct field access encoded as ``a__b`` — goes through ``emit_variable_reference()``, which decodes the ``__`` encoding back to ``a.b`` and applies the identifier/signal-name mapping described below.
 
 **Expression transformations:**
 
-* ``arr[i]`` → ``arr(i)`` (VHDL array indexing uses parentheses)
-* ``point__x`` → ``point.x`` (struct field access)
-* ``-42`` → ``to_signed(-42, 32)`` (signed literal)
-* ``-x`` → ``-unsigned(x)`` (negation of variable)
+* ``arr[i]`` -> ``arr(i)`` (VHDL array indexing uses parentheses)
+* ``point__x`` -> ``point.x`` (struct field access, encoded by the parser as ``__``)
+* ``42`` -> ``std_logic_vector(to_unsigned(42, 32))``
+* ``-42`` -> ``std_logic_vector(to_signed(-42, 32))``
+* ``-x`` -> ``std_logic_vector(0 - unsigned(x))``
 
 Unary Operators
 ~~~~~~~~~~~~~~~
 
-.. code-block:: c
+``generate_unary_operation()`` handles ``!`` (logical NOT — the parser stores it as a ``NODE_BINARY_OP`` with one child) and ``~`` (bitwise NOT):
 
-   static void generate_unary_operation(ASTNode *node, FILE *output_file, void (*node_generator)(ASTNode*, FILE*)) {
-       if (!node->value || node->num_children != 1) {
-           fprintf(output_file, "-- unsupported unary op");
-           return;
-       }
-       
-       ASTNode *inner = node->children[0];
-       
-       if (strcmp(node->value, "!") == 0) {
-           // Logical NOT
-           if (node_is_boolean(inner)) {
-               fprintf(output_file, "not (");
-               generate_node(inner, output_file);
-               fprintf(output_file, ")");
-           } else {
-               // Treat as C-style boolean (0 = false, non-zero = true)
-               fprintf(output_file, "(unsigned(");
-               generate_node(inner, output_file);
-               fprintf(output_file, ") = 0)");
-           }
-       } else if (strcmp(node->value, "~") == 0) {
-           // Bitwise NOT
-           fprintf(output_file, "not unsigned(");
-           generate_node(inner, output_file);
-           fprintf(output_file, ")");
-       }
-   }
+* ``!x`` -> ``not (x)`` if ``x`` is already a boolean-producing expression, otherwise ``(unsigned(x) = 0)`` (C-style: any nonzero value is true)
+* ``~x`` -> ``std_logic_vector(not unsigned(x))``
 
-**Unary operator mapping:**
+.. _`Conditions`:
 
-* ``!x`` → ``not (x)`` if ``x`` is boolean
-* ``!x`` → ``(unsigned(x) = 0)`` if ``x`` is numeric (C-style boolean)
-* ``~x`` → ``not unsigned(x)`` (bitwise NOT)
+Conditions
+~~~~~~~~~~
 
-Helper Functions
-----------------
+``emit_conditional_expression()`` wraps a condition for use in an ``if``/``while``: a comparison operator passes through unchanged; anything else (an arithmetic expression, a bare identifier, an array access) is wrapped as ``unsigned(...) /= 0``, matching C's "any nonzero value is true" rule.
 
-emit_condition()
-~~~~~~~~~~~~~~~~
+.. _`Reserved names`:
 
-Converts C condition expressions to VHDL boolean expressions:
+Identifier Safety and Reserved Names
+-------------------------------------
 
-.. code-block:: c
+Two concerns are handled centrally in ``codegen_vhdl_helpers.c`` rather than at each call site:
 
-   static void emit_condition(ASTNode *cond, FILE *output_file) {
-       if (!cond) {
-           fprintf(output_file, "(false)");
-           return;
-       }
-       
-       if (cond->type == NODE_BINARY_EXPR) {
-           if (is_bool_comparison(cond->value)) {
-               // Already a boolean comparison
-               generate_node(cond, output_file);
-           } else {
-               // Arithmetic expression used as condition: treat as "!= 0"
-               fprintf(output_file, "unsigned(");
-               generate_node(cond, output_file);
-               fprintf(output_file, ") /= 0");
-           }
-       } else if (cond->type == NODE_EXPRESSION && cond->value) {
-           // Simple identifier as condition
-           fprintf(output_file, "unsigned(%s) /= 0", cond->value);
-       } else {
-           fprintf(output_file, "(%s)", cond->value ? cond->value : "false");
-       }
-   }
+* **VHDL identifier validity** — ``is_valid_vhdl_identifier()``/``sanitize_vhdl_identifier()`` reject or rewrite a C identifier that isn't valid VHDL (leading digit, consecutive underscores, a VHDL reserved word such as ``process`` or ``signal``), so a C variable that happens to share a name with a VHDL keyword still compiles.
+* **The ``result`` port** — a C variable or parameter literally named ``result`` would otherwise collide with the entity's ``result`` output port. ``emit_mapped_signal_name()`` appends ``_local`` to any signal name that collides with a reserved VHDL port name, and every declaration, read, and write of a variable goes through this same mapper so the renamed signal is used consistently.
 
-**Behavior:**
+.. _`Local Signals and Reset`:
 
-* Boolean comparisons (``x > 0``) → passed through unchanged
-* Arithmetic expressions (``x + y``) → wrapped as ``unsigned(...) /= 0``
-* Identifiers (``flag``) → converted to ``unsigned(flag) /= 0``
+Local Signals and Reset
+------------------------
 
-emit_array_element()
-~~~~~~~~~~~~~~~~~~~~
+``emit_function_local_signals()`` (``codegen_vhdl_types.c``) walks a function's statement tree and declares one VHDL signal per local variable: a struct-typed variable becomes a ``<StructName>_t`` signal, an array becomes a signal of a generated array type (with a ``constant ..._init`` and initializer if the C declaration had one), and everything else becomes a plain signal typed through ``ctype_to_vhdl()``.
 
-Converts C array subscripting to VHDL array indexing:
-
-.. code-block:: c
-
-   static void emit_array_element(const char *value, FILE *output_file) {
-       char arr_name[64] = {0};
-       char arr_idx[64] = {0};
-       
-       const char *lbr = strchr(value, '[');
-       if (!lbr) {
-           fprintf(output_file, "%s", value);
-           return;
-       }
-       
-       // Extract array name and index
-       int name_len = (int)(lbr - value);
-       strncpy(arr_name, value, name_len);
-       
-       const char *idx_start = lbr + 1;
-       const char *idx_end = strchr(idx_start, ']');
-       if (idx_end && idx_end > idx_start) {
-           strncpy(arr_idx, idx_start, idx_end - idx_start);
-           fprintf(output_file, "%s(%s)", arr_name, arr_idx);  // VHDL uses parentheses
-       } else {
-           fprintf(output_file, "-- Invalid array index");
-       }
-   }
-
-**Transformation:** ``arr[i]`` → ``arr(i)``
-
-emit_assignment()
-~~~~~~~~~~~~~~~~~
-
-Generates VHDL signal assignments:
-
-.. code-block:: c
-
-   static void emit_assignment(ASTNode *assign, FILE *output_file, const char *indent) {
-       if (!assign || assign->num_children != 2) return;
-       
-       ASTNode *lhs = assign->children[0];
-       ASTNode *rhs = assign->children[1];
-       
-       fprintf(output_file, "%s", indent);
-       
-       // Handle array element assignment
-       if (lhs->value && strchr(lhs->value, '[')) {
-           // Parse arr[idx] → emit arr(idx) <= rhs;
-           // ...
-       } else {
-           // Simple assignment
-           fprintf(output_file, "%s <= ", lhs->value);
-           generate_node(rhs, output_file);
-           fprintf(output_file, ";\n");
-       }
-   }
-
-**Output:** ``variable <= expression;`` with proper indentation
+``emit_function_reset_logic()`` mirrors that same walk to emit a reset assignment for every one of those signals inside the process's ``if reset = '1' then`` branch — an array resets to ``(others => '0')``, a struct resets field by field, everything else resets through the same signal-name mapper used everywhere else.
 
 Struct Support
 --------------
@@ -833,29 +416,9 @@ Struct Support
 emit_all_struct_declarations()
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Generates VHDL record types for C structs:
-
-.. code-block:: c
-
-   static void emit_all_struct_declarations(FILE *output_file) {
-       for (int s = 0; s < g_struct_count; ++s) {
-           StructInfo *si = &g_structs[s];
-           fprintf(output_file, "-- Struct %s as VHDL record\n", si->name);
-           fprintf(output_file, "type %s_t is record\n", si->name);
-           
-           for (int f = 0; f < si->field_count; ++f) {
-               fprintf(output_file, "  %s : %s;\n", 
-                   si->fields[f].field_name,
-                   ctype_to_vhdl(si->fields[f].field_type));
-           }
-           
-           fprintf(output_file, "end record;\n\n");
-       }
-   }
+Struct types cannot be declared as bare records at file scope — a VHDL design file may contain only design units, so a bare ``type ... is record`` there is a syntax error. ``emit_all_struct_declarations()`` (``codegen_vhdl_types.c``) instead wraps every registered struct's record type in a single package (named by the ``VHDL_TYPES_PACKAGE`` constant, ``gates_types``), which every entity then imports with ``use work.gates_types.all;``.
 
 **Example:**
-
-C code:
 
 .. code-block:: c
 
@@ -864,118 +427,56 @@ C code:
        int y;
    };
 
-Generated VHDL:
-
 .. code-block:: vhdl
 
-   -- Struct Point as VHDL record
-   type Point_t is record
-     x : std_logic_vector(31 downto 0);
-     y : std_logic_vector(31 downto 0);
-   end record;
+   library IEEE;
+   use IEEE.STD_LOGIC_1164.ALL;
+   use IEEE.NUMERIC_STD.ALL;
 
-emit_local_signals()
-~~~~~~~~~~~~~~~~~~~~
-
-Declares VHDL signals for local variables:
-
-.. code-block:: c
-
-   static void emit_local_signals(ASTNode *function_decl, FILE *output_file) {
-       // Traverse function body to find variable declarations
-       for (int i = 0; i < function_decl->num_children; ++i) {
-           ASTNode *child = function_decl->children[i];
-           if (child->type != NODE_STATEMENT) continue;
-           
-           for (int j = 0; j < child->num_children; ++j) {
-               ASTNode *stmt_child = child->children[j];
-               
-               if (stmt_child->type == NODE_VAR_DECL) {
-                   // Check if it's a struct
-                   if (find_struct_index(stmt_child->token.value) >= 0) {
-                       fprintf(output_file, "  signal %s : %s_t;\n", 
-                           stmt_child->value, stmt_child->token.value);
-                       continue;
-                   }
-                   
-                   // Check if it's an array
-                   char *arr_bracket = strchr(stmt_child->value, '[');
-                   if (arr_bracket) {
-                       // Extract array name and size
-                       // Generate: type arr_type is array (0 to size-1) of element_type;
-                       // Generate: signal arr : arr_type;
-                       // ...
-                   } else {
-                       // Scalar variable
-                       fprintf(output_file, "  signal %s : %s;\n", 
-                           stmt_child->value, 
-                           ctype_to_vhdl(stmt_child->token.value));
-                   }
-               }
-           }
-       }
-   }
-
-**Output example:**
-
-.. code-block:: vhdl
-
-   signal x : std_logic_vector(31 downto 0);
-   signal arr : arr_type;
-   signal point : Point_t;
+   package gates_types is
+     -- Struct Point as VHDL record
+     type Point_t is record
+       x : std_logic_vector(31 downto 0);
+       y : std_logic_vector(31 downto 0);
+     end record;
+   end package;
 
 Array Support
 -------------
 
-Arrays are declared as constrained VHDL array types:
+A fixed-size C array becomes a generated VHDL array type plus a signal of that type (``emit_array_signal_declaration()`` in ``codegen_vhdl_types.c``):
 
-.. code-block:: c
+.. code-block:: vhdl
 
-   // For: int arr[10];
-   fprintf(output_file, "  type arr_type is array (0 to 9) of std_logic_vector(31 downto 0);\n");
-   fprintf(output_file, "  signal arr : arr_type;\n");
+   -- for: int arr[4];
+   type arr_type is array (0 to 3) of std_logic_vector(31 downto 0);
+   signal arr : arr_type;
 
-Array initialization:
-
-.. code-block:: c
-
-   // For: int arr[3] = {1, 2, 3};
-   fprintf(output_file, "  constant arr_init : arr_type := (");
-   for (int k = 0; k < init_list->num_children; ++k) {
-       const char *val = init_list->children[k]->value;
-       fprintf(output_file, "to_unsigned(%s, 32)%s", val, 
-           (k < init_list->num_children - 1) ? ", " : "");
-   }
-   fprintf(output_file, ");\n");
-   fprintf(output_file, "  signal arr : arr_type := arr_init;\n");
+When the C declaration has an initializer, a ``constant ..._init`` is emitted alongside it and the signal is declared ``:= arr_init`` instead of bare — see ``emit_array_initializer_constant()``.
 
 Symbol Table Integration
 -------------------------
 
-The code generator uses the global struct symbol table:
-
-.. code-block:: c
-
-   extern StructInfo g_structs[64];
-   extern int g_struct_count;
-
-**Functions:**
-
-* ``find_struct_index(const char *name)`` - Lookup struct by name
-* ``struct_field_type(const char *struct_name, const char *field_name)`` - Get field type
-
-**StructInfo definition:**
+The code generator reads struct layout from the global struct symbol table populated during parsing (``symbol_structs.c``, ``include/symbol_structs.h``):
 
 .. code-block:: c
 
    typedef struct {
-       char name[64];
-       struct { 
-           char field_name[64]; 
-           char field_type[32]; 
-       } fields[32];
+       char name[STRUCT_NAME_LENGTH];       // 64
+       struct {
+           char field_name[FIELD_NAME_LENGTH]; // 64
+           char field_type[FIELD_TYPE_LENGTH]; // 32
+       } fields[MAX_STRUCT_FIELDS];         // GATES_MAX_STRUCT_FIELDS, default 32
        int field_count;
    } StructInfo;
+
+**Functions used by codegen:**
+
+* ``find_struct_index(const char *name)`` — look up a struct by name, or ``-1``
+* ``get_struct_info(int struct_index)`` — read-only access to a struct's fields
+* ``get_struct_count(void)`` — how many structs are registered
+
+The table itself, and its size limits, are module-private state in ``symbol_structs.c``; see :doc:`symbols` for how it is populated during parsing.
 
 Complete Generation Example
 ----------------------------
@@ -988,29 +489,36 @@ C code:
        int x;
        int y;
    };
-   
+
    int distance(struct Point p1, struct Point p2) {
        int dx = p1.x - p2.x;
        int dy = p1.y - p2.y;
        return dx * dx + dy * dy;
    }
 
-Generated VHDL:
+Generated VHDL (verified against the current build):
 
 .. code-block:: vhdl
 
-   -- VHDL generated by gates 
-   
+   -- VHDL generated by gates
+
    library IEEE;
    use IEEE.STD_LOGIC_1164.ALL;
    use IEEE.NUMERIC_STD.ALL;
-   
-   -- Struct Point as VHDL record
-   type Point_t is record
-     x : std_logic_vector(31 downto 0);
-     y : std_logic_vector(31 downto 0);
-   end record;
-   
+
+   package gates_types is
+     -- Struct Point as VHDL record
+     type Point_t is record
+       x : std_logic_vector(31 downto 0);
+       y : std_logic_vector(31 downto 0);
+     end record;
+   end package;
+
+   library IEEE;
+   use IEEE.STD_LOGIC_1164.ALL;
+   use IEEE.NUMERIC_STD.ALL;
+   use work.gates_types.all;
+
    -- Function: distance
    entity distance is
      port (
@@ -1021,7 +529,7 @@ Generated VHDL:
        result : out std_logic_vector(31 downto 0)
      );
    end entity;
-   
+
    architecture behavioral of distance is
      signal dx : std_logic_vector(31 downto 0);
      signal dy : std_logic_vector(31 downto 0);
@@ -1029,95 +537,49 @@ Generated VHDL:
      process(clk, reset)
      begin
        if reset = '1' then
-         -- Reset logic (user-defined)
+         dx <= (others => '0');
+         dy <= (others => '0');
        elsif rising_edge(clk) then
-         dx <= unsigned(p1.x) - unsigned(p2.x);
-         dy <= unsigned(p1.y) - unsigned(p2.y);
-         result <= unsigned(dx) * unsigned(dx) + unsigned(dy) * unsigned(dy);
+         dx <= std_logic_vector(unsigned(p1.x) - unsigned(p2.x));
+         dy <= std_logic_vector(unsigned(p1.y) - unsigned(p2.y));
+         result <= std_logic_vector(unsigned(std_logic_vector(unsigned(dx) * unsigned(dx))) + unsigned(std_logic_vector(unsigned(dy) * unsigned(dy))));
        end if;
      end process;
    end architecture;
+
+The doubled ``unsigned(std_logic_vector(...))`` wrapping on the ``result`` line is the arithmetic fallback in `Binary Expressions`_ applied twice (once for ``*``, once for ``+``) without simplifying the intermediate cast — correct VHDL, but not the tightest output; see `Limitations`_.
 
 Design Decisions
 ----------------
 
 **Synchronous design:**
 
-* All functions are clocked processes (``rising_edge(clk)``)
-* Enables synthesis to FPGA/ASIC
+* Every function is a single clocked process (``rising_edge(clk)``)
 * Every function has ``clk`` and ``reset`` ports
 
 **Type conversions:**
 
-* Extensive use of ``unsigned()`` wrapping for arithmetic
-* ``to_unsigned()`` for numeric literals
-* ``to_signed()`` for negative literals
-* Ensures type safety in VHDL
-
-**Operator normalization:**
-
-* C ``==`` → VHDL ``=``
-* C ``!=`` → VHDL ``/=``
-* C ``&&`` → VHDL ``and``
-* C ``||`` → VHDL ``or``
+* Arithmetic and comparison operands are wrapped in ``unsigned()``/``signed()``
+* ``to_unsigned()``/``to_signed()`` for numeric literals, sized by ``VHDL_BIT_WIDTH`` (32 by default, overridable with ``-DGATES_VHDL_BIT_WIDTH``)
 
 **Array indexing:**
 
-* C ``arr[i]`` → VHDL ``arr(i)``
-* VHDL uses parentheses for array subscripting
+* C ``arr[i]`` -> VHDL ``arr(i)``
 
 **Struct field flattening:**
 
-* Parser converts ``point.x`` → ``point__x``
-* Code generator converts ``point__x`` → ``point.x`` for VHDL
+* The parser encodes ``point.x`` as ``point__x`` in the AST; the code generator decodes ``__`` back to ``.`` when emitting
 
 **For loop transformation:**
 
-* For loops rewritten as while loops
-* Initialization emitted before loop
-* Increment emitted at end of loop body
+* Rewritten as a ``while`` loop; initialization emitted before the loop, increment emitted at the end of the loop body
 
 Limitations
 -----------
 
-**Type system:**
-
-* No true floating-point arithmetic (uses bit vectors)
-* No string support
-* No pointer arithmetic
-* Limited type checking
-
-**Control flow:**
-
-* No switch statements
-* No do-while loops
-* No goto statements
-* Break/continue only in loops
-
-**Expressions:**
-
-* No short-circuit evaluation optimization
-* No operator overloading
-* No function calls (each function is independent entity)
-
-**Hardware semantics:**
-
-* Synchronous design only (no asynchronous logic)
-* Single clock domain
-* No memory inference (registers only)
-* No pipelining
+See :doc:`../known_issues` for the current, maintained list. In summary: no cross-function wiring (each function is an independent entity), no resource sharing or constant folding (so a repeated cast, as in the ``distance`` example above, is not simplified), signal assignment is deferred by one clock cycle (VHDL semantics, not a bug), and the language subset itself excludes globals, pointers, ``switch``/``do-while``, and (as of this writing) statement-level ``++``/``--``/compound assignment.
 
 Summary
 -------
 
-The VHDL code generator:
-
-* Traverses the AST and emits synthesizable VHDL
-* Maps C functions to VHDL entities with clocked processes
-* Converts C types to VHDL types (``int`` → ``std_logic_vector(31 downto 0)``)
-* Handles structs as VHDL records
-* Supports arrays with VHDL array types
-* Translates control flow to VHDL equivalents
-* Performs extensive type conversions for VHDL compatibility
-
-The implementation prioritizes **synthesizable output** and **hardware semantics** over direct C-to-VHDL translation, producing functionally equivalent but synchronous, clocked implementations of C programs.
+The VHDL code generator traverses the AST and emits synthesizable VHDL: C functions become entities with clocked processes, C types map to fixed-width ``std_logic_vector``s, structs become VHDL records inside a shared package, arrays become VHDL array types, and control flow maps onto ``if``/``elsif``/``else`` and ``while`` (``for`` desugared into it). It favors straightforward, verifiably-correct output over compact output — see `Limitations`_ for what that trades away.
