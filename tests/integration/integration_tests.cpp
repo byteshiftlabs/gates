@@ -492,6 +492,45 @@ TEST_F(NegativeTest, MissingFunctionBodyReturnsNull) {
     }
 }
 
+TEST_F(NegativeTest, StandaloneIncrementIsRejectedNotDropped) {
+    // i++; as a statement (outside a for-header) used to be silently
+    // discarded: no error, and the increment never reached the output.
+    const char *invalid_src = "int func(int i) { i++; return i; }";
+    FILE *fin = tmpfile();
+    ASSERT_NE(fin, nullptr) << "tmpfile() failed";
+
+    fwrite(invalid_src, 1, strlen(invalid_src), fin);
+    rewind(fin);
+
+    ASTNode *program = parse_program(fin);
+    fclose(fin);
+
+    if (program) {
+        free_node(program);
+    }
+    EXPECT_GT(get_error_count(), 0) << "'i++;' as a statement must be reported, not silently dropped";
+}
+
+TEST_F(NegativeTest, StandaloneCompoundAssignmentIsRejectedNotDropped) {
+    // c += b; used to be silently discarded the same way: += is not
+    // tokenized as a single operator, so it fell through to the same
+    // silent-drop path as i++.
+    const char *invalid_src = "int func(int c, int b) { c += b; return c; }";
+    FILE *fin = tmpfile();
+    ASSERT_NE(fin, nullptr) << "tmpfile() failed";
+
+    fwrite(invalid_src, 1, strlen(invalid_src), fin);
+    rewind(fin);
+
+    ASTNode *program = parse_program(fin);
+    fclose(fin);
+
+    if (program) {
+        free_node(program);
+    }
+    EXPECT_GT(get_error_count(), 0) << "'c += b;' as a statement must be reported, not silently dropped";
+}
+
 TEST_F(NegativeTest, UnbalancedBracesReturnsNull) {
     const char *invalid_src = "int func(int x) { return x; "; // Missing closing brace
     FILE *fin = tmpfile();
