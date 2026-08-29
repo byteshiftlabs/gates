@@ -1,16 +1,16 @@
 Examples
 ========
 
-This section showcases example C files and their generated VHDL output.
-The VHDL snippets below are representative outputs generated from the shown
-inputs unless noted otherwise.
+This section shows example C files and their actual generated VHDL output.
+Every snippet below was compiled with the current build and pasted in
+verbatim — none are hand-written or aspirational.
 
 The ``examples/`` folder in the repository contains additional input files.
 
 Basic Function
 --------------
 
-A simple function with local variable and return value.
+A simple function with a local variable and a return value.
 
 **C input** (inline example):
 
@@ -50,7 +50,7 @@ A simple function with local variable and return value.
        if reset = '1' then
          sum <= (others => '0');
        elsif rising_edge(clk) then
-         sum <= a + b;
+         sum <= std_logic_vector(unsigned(a) + unsigned(b));
          result <= sum;
        end if;
      end process;
@@ -58,7 +58,9 @@ A simple function with local variable and return value.
 
 Each C function becomes an entity with clock/reset ports, parameters as
 ``std_logic_vector`` inputs, and a ``result`` output. Local variables become
-signals with zero-initialized reset logic.
+signals with zero-initialized reset logic. Arithmetic operands are wrapped in
+``unsigned()`` and the result in ``std_logic_vector(...)``, per
+:doc:`internals/codegen`.
 
 Cross-function calls are still a documented limitation: multi-function inputs
 emit separate entities, but gates does not yet synthesize the inter-entity
@@ -67,7 +69,8 @@ wiring needed to connect them automatically.
 Control Flow (if/else)
 ----------------------
 
-Conditional branching maps to VHDL ``if``/``else`` inside the synchronous process.
+Conditional branching maps to VHDL ``if``/``elsif``/``else`` inside the
+synchronous process.
 
 **C input:**
 
@@ -101,8 +104,8 @@ Conditional branching maps to VHDL ``if``/``else`` inside the synchronous proces
      begin
        if reset = '1' then
        elsif rising_edge(clk) then
-         if unsigned(x) < to_unsigned(0, 64) then
-           result <= c_0 - x;
+         if unsigned(x) < to_unsigned(0, 32) then
+           result <= std_logic_vector(to_unsigned(0, 32) - unsigned(x));
          else
            result <= x;
          end if;
@@ -110,11 +113,18 @@ Conditional branching maps to VHDL ``if``/``else`` inside the synchronous proces
      end process;
    end architecture;
 
+Note the ``else`` branch, ``result <= x;``: a plain identifier returned as-is
+is emitted without a cast — only literals and computed expressions get one.
+A function with no local variables has no signal declarations and an empty
+reset branch, which is why they are missing here compared to the ``add``
+example above.
+
 For Loop
 --------
 
-C ``for`` loops are desugared into initialization, a VHDL ``while`` loop with
-the condition, body statements, and an increment assignment.
+C ``for`` loops are desugared into an initialization assignment, a VHDL
+``while`` loop over the condition, the body, and the increment emitted as the
+last statement in the loop body.
 
 **C input:**
 
@@ -152,25 +162,28 @@ the condition, body statements, and an increment assignment.
          sum <= (others => '0');
          i <= (others => '0');
        elsif rising_edge(clk) then
-         sum <= c_0;
-         i <= c_0;
+         sum <= std_logic_vector(to_unsigned(0, 32));
+         i <= std_logic_vector(to_unsigned(0, 32));
          while unsigned(i) < unsigned(n) loop
-           sum <= sum + i;
-           i <= i + c_1;
+           sum <= std_logic_vector(unsigned(sum) + unsigned(i));
+           i <= std_logic_vector(unsigned(i) + to_unsigned(1, 32));
          end loop;
          result <= sum;
        end if;
      end process;
    end architecture;
 
-Note that ``i++`` is desugared to ``i = i + 1`` during parsing, and integer
-literals ``0`` and ``1`` are emitted as constants ``c_0`` and ``c_1``.
+``i = i + 1`` in the for-header desugars the same way ``i++`` would (see
+:doc:`internals/parser`); every numeric literal is emitted inline as
+``to_unsigned(N, 32)`` — there is no named-constant folding.
 
 Structs
 -------
 
-C structs become VHDL record types. Struct-typed parameters use the record
-type directly. Field access maps to VHDL record field notation.
+C structs become VHDL record types, wrapped in a shared package (a bare
+``type ... is record`` at file scope is not legal VHDL — see
+:doc:`internals/codegen`). Struct-typed parameters use the record type
+directly, and field access maps to VHDL's ``.`` notation.
 
 **C input** (``examples/struct_example.c``):
 
@@ -182,15 +195,18 @@ type directly. Field access maps to VHDL record field notation.
        return p.x + p.y;
    }
 
-**VHDL output** (first entity only):
+**VHDL output** (package and entity; the ``add_points`` architecture is
+omitted here for brevity, and follows the same shape as ``add`` above):
 
 .. code-block:: vhdl
 
-   -- Struct Point as VHDL record
-   type Point_t is record
-     x : std_logic_vector(31 downto 0);
-     y : std_logic_vector(31 downto 0);
-   end record;
+   package gates_types is
+     -- Struct Point as VHDL record
+     type Point_t is record
+       x : std_logic_vector(31 downto 0);
+       y : std_logic_vector(31 downto 0);
+     end record;
+   end package;
 
    -- Function: add_points
    entity add_points is
@@ -201,17 +217,6 @@ type directly. Field access maps to VHDL record field notation.
        result : out std_logic_vector(31 downto 0)
      );
    end entity;
-
-   architecture behavioral of add_points is
-   begin
-     process(clk, reset)
-     begin
-       if reset = '1' then
-       elsif rising_edge(clk) then
-         result <= p.x + p.y;
-       end if;
-     end process;
-   end architecture;
 
 Running the Examples
 --------------------
