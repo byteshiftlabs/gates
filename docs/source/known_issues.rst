@@ -27,6 +27,11 @@ Language Limitations
    * - Low
      - No nested structs or arrays of structs.
      - Flatten struct hierarchies. Planned for Phase 2.
+   * - Medium
+     - ``i++``, ``i--``, and compound assignment (``+=``, ``-=``, ``*=``, etc.)
+       are rejected as statements outside a ``for`` header, where the
+       equivalent desugaring already exists.
+     - Use ``i = i + 1;`` (or the equivalent) instead. Planned for Phase 2.
 
 VHDL Generation
 ---------------

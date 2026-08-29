@@ -311,7 +311,41 @@ static ASTNode* parse_assignment_or_expression(ParserContext *ctx)
     }
     else
     {
-        // Not an assignment, skip to semicolon
+        // Not a plain assignment. This used to be silently discarded here,
+        // which dropped i++, i--, and every compound assignment (+=, -=, ...)
+        // as a no-op: no error, no VHDL, exit status 0. None of those
+        // operators are tokenized as a single "op=" token, so a leading
+        // arithmetic/bitwise/shift operator is the signal that the statement
+        // was one of them rather than some other malformed expression.
+        int is_compound_op =
+            strcmp(ctx->current_token.value, "++") == 0 ||
+            strcmp(ctx->current_token.value, "--") == 0 ||
+            strcmp(ctx->current_token.value, "+") == 0 ||
+            strcmp(ctx->current_token.value, "-") == 0 ||
+            strcmp(ctx->current_token.value, "*") == 0 ||
+            strcmp(ctx->current_token.value, "/") == 0 ||
+            strcmp(ctx->current_token.value, "%") == 0 ||
+            strcmp(ctx->current_token.value, "&") == 0 ||
+            strcmp(ctx->current_token.value, "|") == 0 ||
+            strcmp(ctx->current_token.value, "^") == 0 ||
+            strcmp(ctx->current_token.value, "<<") == 0 ||
+            strcmp(ctx->current_token.value, ">>") == 0;
+
+        if (is_compound_op)
+        {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "'%s' is not supported as a statement; only 'name = expr;' "
+                      "assignments are (increment/decrement and compound-assignment "
+                      "operators are not yet implemented, see ROADMAP.md)",
+                      ctx->current_token.value);
+        }
+        else
+        {
+            log_error(ERROR_CATEGORY_PARSER, ctx->current_token.line,
+                      "Expected '=' after '%s'", lhs_buf);
+        }
+
+        // Skip to the next semicolon so a later statement can still be parsed.
         while (!match(ctx, TOKEN_SEMICOLON) && !match(ctx, TOKEN_EOF))
         {
             advance(ctx);
