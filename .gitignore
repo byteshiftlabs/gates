@@ -16,6 +16,9 @@ docs/audit-findings.md
 # Generated files
 *.vhdl
 *.vhd
+# ...except the checked-in golden files docs/source/examples.rst pulls in via
+# literalinclude and tools/check_doc_examples.sh regenerates and diffs against.
+!/examples/doc/*.vhdl
 
 # Editor/IDE files
 *.swp

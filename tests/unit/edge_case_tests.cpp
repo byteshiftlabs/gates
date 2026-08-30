@@ -174,11 +174,24 @@ TEST_F(EdgeCaseTest, FreeNullNodeSafe) {
 }
 
 // -------------------------------------------------------------------
-// AST: add_child with NULL parent should not crash
-// (Currently segfaults — documents known limitation)
+// AST: add_child with a NULL parent or child logs an error and returns
+// instead of crashing (astnode.c guards both cases explicitly).
 // -------------------------------------------------------------------
-TEST_F(EdgeCaseTest, AddChildNullParentDocumented) {
-    // add_child(NULL, child) is undefined — only test valid usage
+TEST_F(EdgeCaseTest, AddChildNullParentIsSafe) {
+    ASTNode *child = create_node(NODE_EXPRESSION);
+    add_child(NULL, child); // should log an error, not crash
+    EXPECT_EQ(child->parent, nullptr);
+    free_node(child);
+}
+
+TEST_F(EdgeCaseTest, AddChildNullChildIsSafe) {
+    ASTNode *parent = create_node(NODE_PROGRAM);
+    add_child(parent, NULL); // should log an error, not crash
+    EXPECT_EQ(parent->num_children, 0);
+    free_node(parent);
+}
+
+TEST_F(EdgeCaseTest, AddChildValidUsage) {
     ASTNode *parent = create_node(NODE_PROGRAM);
     ASTNode *child = create_node(NODE_EXPRESSION);
     add_child(parent, child);

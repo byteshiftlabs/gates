@@ -108,6 +108,16 @@ else()
   message(STATUS "cppcheck not found — install it for static analysis (apt install cppcheck)")
 endif()
 
+# =====================
+# VHDL analysis (GHDL) — used by the doc-examples regression test below
+# =====================
+find_program(GHDL ghdl)
+if(GHDL)
+  message(STATUS "Found ghdl: ${GHDL}")
+else()
+  message(STATUS "ghdl not found — doc-examples test will skip VHDL analysis (apt install ghdl)")
+endif()
+
 # Docs target for Sphinx documentation
 add_custom_target(docs
     COMMAND sphinx-build -b html docs/source docs/build/html
@@ -201,5 +211,23 @@ if(ENABLE_TESTING)
   )
   set_tests_properties(cli_directory_input_is_rejected
     PROPERTIES WILL_FAIL TRUE
+  )
+
+  # docs/source/examples.rst pulls examples/doc/*.c and *.vhdl in verbatim via
+  # literalinclude. This regenerates the VHDL from each .c with the current
+  # build and fails if it no longer matches the checked-in golden file (or no
+  # longer analyzes with GHDL, when installed) — so the docs can't drift from
+  # what gates actually produces.
+  if(GHDL)
+    set(GHDL_ARG_FOR_TEST ${GHDL})
+  else()
+    set(GHDL_ARG_FOR_TEST "")
+  endif()
+  add_test(
+    NAME docs_examples_match_current_codegen
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_doc_examples.sh
+      $<TARGET_FILE:gates>
+      "${GHDL_ARG_FOR_TEST}"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   )
 endif()
