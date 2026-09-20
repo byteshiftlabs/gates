@@ -17,9 +17,10 @@ The compiler is structured as a pipeline:
     - Supports nested expressions and statement blocks, including nested for and while loops.
 
 3. **VHDL Code Generation (src/codegen/)**
-    - Six modular files: ``codegen_vhdl_main.c``, ``codegen_vhdl_constants.c``,
-      ``codegen_vhdl_helpers.c``, ``codegen_vhdl_types.c``,
-      ``codegen_vhdl_expressions.c``, ``codegen_vhdl_statements.c``.
+    - Seven modular files: ``codegen_vhdl_main.c``, ``codegen_vhdl_emit.c``,
+      ``codegen_vhdl_constants.c``, ``codegen_vhdl_helpers.c``,
+      ``codegen_vhdl_types.c``, ``codegen_vhdl_expressions.c``,
+      ``codegen_vhdl_statements.c``. See :doc:`internals/codegen`.
     - Traverses the AST and emits VHDL code.
     - Maps C types to VHDL types, handles signal declarations, assignments, and control flow.
     - Handles negative values and binary expressions correctly in VHDL.

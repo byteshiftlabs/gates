@@ -64,30 +64,31 @@ The core AST node structure is defined in ``include/astnode.h``:
 Node Types
 ----------
 
-The ``NodeType`` enum defines 19 distinct node types:
+The ``NodeType`` enum, verbatim from ``include/astnode.h`` (which carries no
+per-value comments — the notes below are this page's, not the source's):
 
 .. code-block:: c
 
    typedef enum {
-       NODE_PROGRAM,              // Root node of the AST
-       NODE_FUNCTION_DECL,        // Function declaration
-       NODE_STRUCT_DECL,          // Struct declaration (unused in current parser)
-       NODE_VAR_DECL,             // Variable declaration
-       NODE_STATEMENT,            // Statement container
-       NODE_EXPRESSION,           // Expression (identifier, literal, array access)
-       NODE_BINARY_EXPR,          // Binary expression (left op right)
-       NODE_LITERAL,              // Literal value (unused, use NODE_EXPRESSION)
-       NODE_IDENTIFIER,           // Identifier (unused, use NODE_EXPRESSION)
-       NODE_ASSIGNMENT,           // Assignment statement
-       NODE_BINARY_OP,            // Unary operator (!, ~, -)
-       NODE_IF_STATEMENT,         // If statement
-       NODE_ELSE_IF_STATEMENT,    // Else-if clause
-       NODE_ELSE_STATEMENT,       // Else clause
-       NODE_WHILE_STATEMENT,      // While loop
-       NODE_FOR_STATEMENT,        // For loop
-       NODE_BREAK_STATEMENT,      // Break statement
-       NODE_CONTINUE_STATEMENT,   // Continue statement
-       NODE_FUNC_CALL             // Function call
+       NODE_PROGRAM,
+       NODE_FUNCTION_DECL,
+       NODE_STRUCT_DECL,
+       NODE_VAR_DECL,
+       NODE_STATEMENT,
+       NODE_EXPRESSION,
+       NODE_BINARY_EXPR,
+       NODE_LITERAL,
+       NODE_IDENTIFIER,
+       NODE_ASSIGNMENT,
+       NODE_BINARY_OP,
+       NODE_IF_STATEMENT,
+       NODE_ELSE_IF_STATEMENT,
+       NODE_ELSE_STATEMENT,
+       NODE_WHILE_STATEMENT,
+       NODE_FOR_STATEMENT,
+       NODE_BREAK_STATEMENT,
+       NODE_CONTINUE_STATEMENT,
+       NODE_FUNC_CALL
    } NodeType;
 
 **Usage notes:**
@@ -111,20 +112,22 @@ Creates and initializes a new AST node:
 
 .. code-block:: c
 
-   ASTNode* create_node(NodeType type) {
+   ASTNode* create_node(NodeType type)
+   {
        ASTNode *node = (ASTNode*)malloc(sizeof(ASTNode));
+
        if (!node) {
-           log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to allocate memory for AST node");
-           return NULL;
+           fprintf(stderr, "Fatal: Failed to allocate memory for AST node\n");
+           exit(EXIT_FAILURE);
        }
-       
+
        node->type = type;
-       node->value = NULL;        // No value initially
-       node->parent = NULL;       // No parent initially
-       node->children = NULL;     // No children initially
+       node->value = NULL;
+       node->parent = NULL;
+       node->children = NULL;
        node->num_children = 0;
        node->capacity = 0;
-       
+
        return node;
    }
 
@@ -132,13 +135,19 @@ Creates and initializes a new AST node:
 
 * Allocates memory for the node structure
 * Initializes all fields to default values
-* Returns ``NULL`` if allocation fails (reports via ``log_error``)
-* Returns pointer to the new node on success
+* **Aborts the process** (``fprintf`` to stderr, then ``exit(EXIT_FAILURE)``) if
+  allocation fails — unlike every other allocation failure in the parser,
+  which reports via ``log_error()`` and returns ``NULL``/``void`` for the
+  caller to handle. ``create_node()`` itself never returns ``NULL``: a few
+  call sites (e.g. ``parse_struct_field()`` in ``parse_struct.c``) still have
+  a defensive ``if (!field_node)`` check right after calling it — that check
+  is unreachable in practice, since the OOM path never gets that far back to
+  the caller
 
 **Memory allocation:**
 
 * Node structure is allocated on the heap (``malloc``)
-* ``value`` field is NULL (must be set separately with ``strdup()``)
+* ``value`` field is NULL (must be set separately, via ``safe_strdup()`` — see :doc:`parser`)
 * ``children`` array is NULL (allocated on first ``add_child()`` call)
 
 free_node()
@@ -219,18 +228,22 @@ Adds a child node to a parent node, growing the children array if necessary:
            }
        }
        
-       // Double capacity if array is full
+       // Grow the array if it's full. Capacity is committed only after the
+       // reallocation succeeds — raising it first left the node claiming
+       // space it didn't own on failure, so the *next* add_child call would
+       // skip this branch and write past the still-undersized old block.
        if (parent->num_children >= parent->capacity) {
-           parent->capacity *= CHILDREN_GROWTH_FACTOR;
-           ASTNode **new_children = (ASTNode**)realloc(parent->children, 
-                                                parent->capacity * sizeof(ASTNode*));
+           int new_capacity = parent->capacity * CHILDREN_GROWTH_FACTOR;
+           ASTNode **new_children = (ASTNode**)realloc(parent->children,
+                                                (size_t)new_capacity * sizeof(ASTNode*));
            if (!new_children) {
                log_error(ERROR_CATEGORY_GENERAL, 0, "Failed to reallocate memory for child nodes");
                return;
            }
            parent->children = new_children;
+           parent->capacity = new_capacity;
        }
-       
+
        // Add child and set parent pointer
        parent->children[parent->num_children++] = child;
        child->parent = parent;
@@ -238,12 +251,12 @@ Adds a child node to a parent node, growing the children array if necessary:
 
 **Behavior:**
 
-* **Lazy initialization**: Allocates children array on first child (initial capacity = 4)
-* **Dynamic growth**: Doubles capacity when the current array is full
-* **Bidirectional links**: Sets child's ``parent`` pointer for bottom-up traversal
-* **Null safety**: Checks for NULL ``parent`` or ``child`` parameters
-* **Error handling**: Reports errors via ``log_error()`` and returns early on allocation failure (no ``exit``)
-* **Safe realloc**: Uses temporary variable to preserve old allocation on failure
+* **Lazy initialization**: allocates the children array on the first child (initial capacity = 4)
+* **Dynamic growth**: doubles capacity when the current array is full
+* **Bidirectional links**: sets the child's ``parent`` pointer for bottom-up traversal
+* **Null safety**: checks for NULL ``parent`` or ``child`` and reports via ``log_error()`` instead of crashing
+* **Error handling**: reports allocation/reallocation failure via ``log_error()`` and returns early (no ``exit`` here, unlike ``create_node()``)
+* **Capacity committed only on success**: ``parent->capacity`` is only updated to ``new_capacity`` after ``realloc()`` returns non-NULL, so a failed grow leaves the struct's bookkeeping consistent with the array it actually still owns
 
 **Capacity growth sequence:**
 
@@ -428,59 +441,77 @@ Tree Traversal Utilities
 print_ast()
 ~~~~~~~~~~~
 
-The ``utils.c`` file provides ``print_ast()`` for debugging:
+``src/core/utils.c`` (not ``astnode.c``) provides ``print_ast()``, declared in ``include/utils.h``:
 
 .. code-block:: c
 
    void print_ast(ASTNode* node, int level);
 
-This function recursively prints the AST in a tree format:
+.. important::
+   ``print_ast()`` is only ever called from ``src/app/gates.c``, and only
+   inside an ``#ifdef DEBUG`` block — it does not run in a normal build. To
+   see it, configure with ``cmake -DDEBUG=ON`` (see :doc:`../usage`).
+
+The traversal itself delegates the per-node-type formatting to a helper, ``print_node_type()``, so the tree-walking logic stays separate from the display format:
 
 .. code-block:: c
 
-   void print_ast(ASTNode* node, int level) {
-       if (!node) return;
-       
-       // Determine if this node is the last child of its parent
-       int is_last = 1;
-       if (node->parent) {
-           for (int i = 0; i < node->parent->num_children; i++) {
-               if (node->parent->children[i] == node) {
-                   is_last = (i == node->parent->num_children - 1);
-                   break;
-               }
-           }
+   // Box-drawing characters (└── / ├──) give visual structure to the AST dump.
+   static void print_tree_prefix(int level, int is_last)
+   {
+       for (int level_idx = 0; level_idx < level; level_idx++) {
+           printf("%s", (level_idx == level - 1) ? (is_last ? "└── " : "├── ") : "    ");
        }
-       
-       // Print tree branches
-       print_tree_prefix(level, is_last);
-       
-       // Print node type and value
+   }
+
+   // Each AST node type has a distinct display format for the debug tree.
+   static void print_node_type(const ASTNode *node)
+   {
        switch (node->type) {
            case NODE_PROGRAM:
                printf("PROGRAM\n");
                break;
            case NODE_FUNCTION_DECL:
                printf("FUNCTION: %s (returns: %s)\n",
-                      node->value, node->token.value);
+                      node->value ? node->value : "(null)", node->token.value);
                break;
            case NODE_VAR_DECL:
                printf("VAR: %s %s\n",
-                      node->token.value, node->value);
+                      node->token.value, node->value ? node->value : "(null)");
                break;
            case NODE_EXPRESSION:
-               printf("EXPR: %s\n", node->value);
+               printf("EXPR: %s\n", node->value ? node->value : "(null)");
                break;
            case NODE_BINARY_EXPR:
-               printf("BINARY: %s\n", node->value);
+               printf("BINARY: %s\n", node->value ? node->value : "(op)");
                break;
            case NODE_ASSIGNMENT:
                printf("ASSIGN\n");
                break;
-           // ... other node types
+           // ...one case per remaining NodeType, including NODE_STRUCT_DECL,
+           // NODE_LITERAL, and NODE_IDENTIFIER, plus a default that prints
+           // "NODE_TYPE_%d" for anything unrecognized...
        }
-       
-       // Recursively print children
+   }
+
+   void print_ast(ASTNode* node, int level)
+   {
+       if (!node) return;
+
+       int is_last = 1;
+       if (node->parent) {
+           const ASTNode *parent = node->parent;
+           for (int i = 0; i < parent->num_children; i++) {
+               if (parent->children[i] == node) {
+                   is_last = (i == parent->num_children - 1);
+                   break;
+               }
+           }
+       }
+
+       print_tree_prefix(level, is_last);
+       print_node_type(node);
+
        for (int i = 0; i < node->num_children; i++) {
            print_ast(node->children[i], level + 1);
        }
@@ -509,21 +540,21 @@ Memory Management Patterns
 .. code-block:: c
 
    ASTNode *node = create_node(NODE_EXPRESSION);
-   node->value = strdup("foo");  // Allocate value string
+   node->value = safe_strdup("foo");  // Allocate value string
 
 **Child addition:**
 
 .. code-block:: c
 
    ASTNode *parent = create_node(NODE_BINARY_EXPR);
-   parent->value = strdup("+");
-   
+   parent->value = safe_strdup("+");
+
    ASTNode *left = create_node(NODE_EXPRESSION);
-   left->value = strdup("3");
-   
+   left->value = safe_strdup("3");
+
    ASTNode *right = create_node(NODE_EXPRESSION);
-   right->value = strdup("4");
-   
+   right->value = safe_strdup("4");
+
    add_child(parent, left);   // Parent adopts left
    add_child(parent, right);  // Parent adopts right
 
@@ -535,8 +566,8 @@ Memory Management Patterns
 
 **Key invariants:**
 
-* All nodes are heap-allocated via ``create_node()``
-* All ``value`` fields are heap-allocated via ``strdup()`` or NULL
+* All nodes are heap-allocated via ``create_node()`` (which aborts the process on OOM rather than returning NULL — see above)
+* All ``value`` fields are heap-allocated via ``safe_strdup()`` (``src/core/utils.c``) or NULL
 * All ``children`` arrays are heap-allocated when non-NULL
 * Parent nodes "own" their children (responsible for freeing them)
 * Root node must be freed with ``free_node()`` to avoid leaks

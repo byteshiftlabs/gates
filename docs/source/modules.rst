@@ -26,16 +26,18 @@ Implements the recursive-descent parser and AST construction, split into focused
 - **parse.c / parse.h** — Top-level parser entry point (``parse_program``). Dispatches to specialized sub-parsers.
 - **parse_expression.c / parse_expression.h** — Expression parsing with full operator precedence and associativity.
 - **parse_statement.c / parse_statement.h** — Variable declarations, assignments, return statements, and expression statements.
-- **parse_control_flow.c / parse_control_flow.h** — Control flow: ``if/else``, ``while``, ``for``, ``break``, ``continue``.
+- **parse_control_flow.c / parse_control_flow.h** — ``if/else``, ``while``, ``break``, ``continue``.
+- **parse_for.c / parse_for.h** — ``for`` loops (separate from the above: a for-header has three clauses instead of one, plus ``++``/``--`` desugaring in the increment clause).
 - **parse_function.c / parse_function.h** — Function declarations and parameter lists.
 - **parse_struct.c / parse_struct.h** — Struct definitions and field registration.
 - **token.c / token.h** — Lexical analyzer (tokenizer). Breaks input into tokens, tracks line numbers, handles identifier truncation.
 
 Codegen Module (src/codegen/)
 -----------------------------
-Generates VHDL code from the AST, organized into six files:
+Generates VHDL code from the AST, organized into seven files:
 
 - **codegen_vhdl_main.c** — Top-level VHDL generation entry point (``generate_vhdl``). Orchestrates entity/architecture output.
+- **codegen_vhdl_emit.c/h** — Module-global output primitives (``emit_init``, ``emit_raw``, ``emit_line``, ``emit_indent``) that every other codegen file writes through.
 - **codegen_vhdl_constants.c/h** — Centralized string and buffer size constants for the codegen module.
 - **codegen_vhdl_helpers.c/h** — Utility functions: signal name mapping, type checking, numeric literal detection, array parsing.
 - **codegen_vhdl_types.c/h** — Struct type declarations, signal declarations, array helpers.
@@ -76,6 +78,10 @@ Contains GoogleTest-based C++ test files organized into subdirectories:
 **Integration Tests** (``tests/integration/``):
 
 - **integration_tests.cpp** — Component boundary tests, end-to-end smoke tests, negative tests, VHDL validation
+
+**CLI Tests** (``tests/cli/``):
+
+- Fixtures exercised by invoking the ``gates`` binary itself, registered directly as CTest cases in ``CMakeLists.txt`` (not GoogleTest cases) — see :doc:`testing`.
 
 The build creates a reusable ``gates_gtest`` static library (all C sources except the CLI front-end) so tests link cleanly without invoking the command-line interface. Tests are auto-discovered with ``gtest_discover_tests`` enabling each test case to appear individually in CTest output.
 
