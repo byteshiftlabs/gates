@@ -45,6 +45,16 @@ signal types using named constants defined in ``codegen_vhdl_constants.c``:
 All numeric types use ``std_logic_vector`` for bit-level representation. IEEE 754
 float support can be added by changing the ``VHDL_TYPE_FLOAT`` constant.
 
+.. note::
+   These widths are **fixed string constants** in ``codegen_vhdl_constants.c``
+   (literally ``"std_logic_vector(31 downto 0)"`` for ``int``, etc.) — they do
+   not change with ``-DGATES_VHDL_BIT_WIDTH``. That build-time override (default
+   32, see :doc:`../usage`) instead controls a separate thing: the width of the
+   ``result`` output port, integer-literal-to-bitstring formatting, and
+   ``to_unsigned()``/``to_integer()`` conversions in emitted expressions (see
+   :doc:`codegen`). A local ``int`` variable's *declared* signal type from
+   ``ctype_to_vhdl()`` stays 32-bit regardless of that override.
+
 Type-Specific Formatting
 ------------------------
 

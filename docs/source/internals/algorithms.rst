@@ -97,8 +97,11 @@ Inside function bodies, ``parse_statement()`` inspects the current token:
 - ``break`` / ``continue`` → dedicated handlers
 
 Each specialized parser consumes its tokens and returns an AST subtree.
-Errors are reported through the centralized error handler with source location,
-and parsing continues where possible.
+Errors are reported through the centralized error handler with source
+location, but there is no real recovery: every parsing loop is guarded with
+``!has_errors()``, so once the first error is logged, ``parse_program()``'s
+top-level loop stops rather than moving on to parse further declarations —
+see :ref:`parser-error-handling` in :doc:`parser`.
 
 For-Loop Desugaring
 -------------------

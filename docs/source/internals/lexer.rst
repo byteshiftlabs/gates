@@ -36,15 +36,27 @@ All mutable lexer state is encapsulated in the ``ParserContext`` struct defined 
        Token current_token;   // Most recently read token
        int current_line;      // Current source line number (1-based)
        FILE *input;           // Source file being parsed
+       int depth;             // Current expression/statement nesting depth
    } ParserContext;
+
+``depth`` is lexer-adjacent state only in the sense that it lives in the same
+struct; the lexer itself never reads or writes it. It's maintained entirely
+by the parser's recursion-depth guard (see :doc:`parser`) and exists here
+because ``ParserContext`` is the one piece of mutable state threaded through
+both layers.
 
 A context is initialized once per parse invocation via ``parser_context_init()``:
 
 .. code-block:: c
 
-   void parser_context_init(ParserContext *ctx, FILE *input);
+   void parser_context_init(ParserContext *ctx, FILE *input)
+   {
+       memset(ctx, 0, sizeof(*ctx));
+       ctx->current_line = 1;
+       ctx->input = input;
+   }
 
-This sets ``current_line`` to 1, zeros the token, and stores the input handle.
+This zeros the whole struct (so ``depth`` and the token both start at zero) before setting ``current_line`` to 1 and storing the input handle.
 
 Token Structure
 ---------------
@@ -124,6 +136,8 @@ The ``is_keyword()`` function checks if a given identifier string matches any en
    }
 
 When the lexer encounters an alphabetic character or underscore, it scans a complete identifier and then uses ``is_keyword()`` to determine whether it should be classified as ``TOKEN_KEYWORD`` or ``TOKEN_IDENTIFIER``.
+
+A second table, ``type_keywords[]`` (also in ``token.c``), holds just the primitive-type subset of ``keywords[]`` (``int``, ``float``, ``char``, ``double`` — notably not ``void`` or ``struct``), checked by ``is_type_keyword()``. This is what the *parser* (not the lexer) uses to decide whether a keyword-led statement is a variable declaration; see :doc:`parser`. The two tables are maintained by hand and must be kept in sync — a comment above each one says so.
 
 Core Lexer Functions
 --------------------
@@ -233,12 +247,19 @@ Token values are bounded by ``MAX_TOKEN_VALUE_LEN`` (``TOKEN_VALUE_SIZE - 1 = 25
        token.value[value_idx++] = current_char;
    }
 
-If a token exceeds the buffer, the value is silently truncated and a warning is logged via the error handler:
+If an identifier exceeds the buffer, the stored value is truncated to ``MAX_TOKEN_VALUE_LEN`` characters and an **error** — not a warning — is logged, so the compile still fails overall even though a (truncated) token is returned:
 
 .. code-block:: c
 
-   log_warning(ERROR_CATEGORY_LEXER, ctx->current_line,
-               "Identifier truncated to %d characters", MAX_TOKEN_VALUE_LEN);
+   log_error(ERROR_CATEGORY_LEXER, ctx->current_line,
+             "Identifier too long (truncated to %d characters)", MAX_TOKEN_VALUE_LEN);
+
+This is the tokenizer's own 255-character limit on raw token text
+(``TOKEN_VALUE_SIZE``); it's separate from — and much larger than — the
+parser's 128-character limit on identifiers used as AST node values, which
+rejects the identifier outright rather than truncating it (see
+:doc:`parser`). Number literals have no equivalent check: an over-length
+number is silently truncated with no diagnostic at all.
 
 Recognized Operators
 --------------------
@@ -263,11 +284,20 @@ Recognized Operators
 Error Handling
 --------------
 
-The lexer reports errors and warnings through the project's error handler (``error_handler.h``):
+The lexer reports errors through the project's error handler (``error_handler.h``):
 
-* **Buffer overflow**: Tokens exceeding ``MAX_TOKEN_VALUE_LEN`` characters are truncated with a warning
-* **Unterminated comments**: Detected when EOF is reached inside a block comment
-* **Failed consume**: ``consume()`` logs an error when the expected token type is not found
+* **Buffer overflow**: identifiers exceeding ``MAX_TOKEN_VALUE_LEN`` characters are truncated *and* logged as an ``ERROR_CATEGORY_LEXER`` error (not merely a warning) — see above
+* **Failed consume**: ``consume()`` itself never logs anything; it just returns 0 on mismatch, and every call site in the parser logs its own error message (see :doc:`parser`)
+
+.. note::
+   **Unterminated block comments are not specifically detected.**
+   ``skip_comment_or_division()`` loops reading characters looking for
+   ``*/`` until either it finds one or ``fgetc()`` returns ``EOF`` — on EOF
+   it just stops, with no error of its own. An unterminated ``/* ...`` at
+   the end of a file silently consumes everything after it, including any
+   real code and the function's closing brace, and only surfaces indirectly
+   as whatever generic parse error results (e.g. ``"Expected '}' after
+   function body"``) rather than a comment-specific diagnostic.
 
 Line Tracking
 -------------
@@ -289,14 +319,14 @@ Design Tradeoffs
 **Fixed-size buffers:**
 
 * Token values are limited to ``TOKEN_VALUE_SIZE - 1`` (255) characters
-* Long identifiers or numbers will be truncated with a warning
+* Long identifiers are truncated and reported as an error; long numbers are truncated silently, with no diagnostic
 * No dynamic memory allocation in token structure
 
-**Recursive comment handling:**
+**Comment skipping via an explicit loop, not recursion:**
 
-* Uses recursion to skip comments (``return get_next_token(ctx)``)
-* Deeply nested comments could theoretically cause stack overflow
-* Elegant and concise implementation
+* ``get_next_token()`` is a ``for (;;) { ... continue; ... }`` loop, not a function that recurses on itself after a comment
+* This is a deliberate choice, called out in a comment in the source: a run of consecutive comments would otherwise cost one stack frame each via ``return get_next_token(ctx)``, and comment-heavy input could overflow the stack
+* Every other branch (identifier, number, punctuation, operator, EOF) still returns directly from inside the loop, via ``return``
 
 Summary
 -------

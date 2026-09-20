@@ -27,13 +27,14 @@ Stores struct type definitions with their fields.
 
 Key operations:
 
-- ``register_struct(name)`` — Returns index, prevents duplicates
-- ``register_struct_field(index, type, name)`` — Adds field (max 32 per struct)
-- ``find_struct_index(name)`` — Linear search by struct name
-- ``get_struct_info(index)`` — Direct access by stored index
+- ``register_struct(name)`` — Returns the existing index if already registered (no duplicate entries), or registers and returns a new index; returns ``-1`` and logs an ``ERROR_CATEGORY_SEMANTIC`` error on a NULL name or a full table
+- ``register_struct_field(index, type, name)`` — Adds a field (max ``MAX_STRUCT_FIELDS`` per struct); returns ``-1`` and logs an error on an invalid index, NULL type/name, or a full field list
+- ``find_struct_index(name)`` — Linear search by struct name, returns ``-1`` if not found
+- ``get_struct_info(index)`` — Bounds-checked access by index; returns ``NULL`` if out of range
+- ``get_struct_count()`` — Current number of registered structs
 - ``reset_struct_table()`` — Clears all entries between compilations
 
-Global capacity: ``MAX_STRUCTS`` (64). Used to emit VHDL record type definitions.
+Global capacity: ``MAX_STRUCTS`` (``GATES_MAX_STRUCTS``, default 64). Used to emit VHDL record type definitions (see :doc:`codegen`).
 
 Array Table
 -----------
@@ -49,11 +50,12 @@ Stores array variable names and their sizes for bounds checking and VHDL generat
 
 Key operations:
 
-- ``register_array(name, size)`` — Adds or updates (prevents duplicates)
-- ``find_array_size(name)`` — Linear search by array name, returns size or -1
+- ``register_array(name, size)`` — Adds a new entry, or updates the size of an existing one with the same name (no duplicate entries); logs an ``ERROR_CATEGORY_SEMANTIC`` error and does nothing on a NULL name, ``size <= 0``, or a full table
+- ``find_array_size(name)`` — Linear search by array name, returns size or ``-1`` if not found
+- ``get_array_count()`` — Current number of registered arrays
 - ``reset_array_table()`` — Clears all entries
 
-Global capacity: ``MAX_ARRAYS`` (128). Validates ``size > 0`` on registration.
+Global capacity: ``MAX_ARRAYS`` (``GATES_MAX_ARRAYS``, default 128).
 
 Scope Handling
 --------------

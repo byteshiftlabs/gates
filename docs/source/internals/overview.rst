@@ -42,11 +42,12 @@ Pipeline Stages
    - Location: ``src/parser/``
    - Components:
 
-     * ``parse.c`` — Main parser driver
-     * ``parse_function.c`` — Function declaration parsing
+     * ``parse.c`` — Top-level driver (program, top-level struct/function dispatch)
+     * ``parse_function.c`` — Function parameter and body parsing
      * ``parse_statement.c`` — Statement parsing (variable declarations, assignments, returns)
      * ``parse_expression.c`` — Expression parsing with precedence climbing
-     * ``parse_control_flow.c`` — Control flow parsing (if/else, while, for, break)
+     * ``parse_control_flow.c`` — if/else and while, plus break/continue
+     * ``parse_for.c`` — for-loop parsing (init/condition/increment; separated from the other control-flow constructs since its header has three clauses instead of one)
      * ``parse_struct.c`` — Struct definition parsing
 
    - Responsibilities:
@@ -77,14 +78,15 @@ Pipeline Stages
 
    - Input: AST + symbol tables
    - Output: VHDL source code written to ``FILE*``
-   - Location: ``src/codegen/`` (split across 6 files)
+   - Location: ``src/codegen/`` (split across 7 files)
    - Components:
 
-     * ``codegen_vhdl_main.c`` — Top-level VHDL generation (entity, architecture)
+     * ``codegen_vhdl_main.c`` — Top-level VHDL generation (entity, architecture), node dispatch
+     * ``codegen_vhdl_emit.c`` — Module-global output-buffer primitives (``emit_init()``, ``emit_raw()``, ``emit_line()``, ``emit_indent()``) everything else writes through
      * ``codegen_vhdl_expressions.c`` — Expression translation
      * ``codegen_vhdl_statements.c`` — Statement translation (assignments, loops, if/else)
-     * ``codegen_vhdl_helpers.c`` — Name mapping, type checking utilities
-     * ``codegen_vhdl_types.c`` — Type/signal declarations
+     * ``codegen_vhdl_helpers.c`` — Name mapping, identifier safety utilities
+     * ``codegen_vhdl_types.c`` — Type/signal declarations, struct-as-record handling
      * ``codegen_vhdl_constants.c`` — Centralized string constants
 
    - Responsibilities:
@@ -103,20 +105,26 @@ Directory Structure
    gates/
    ├── CMakeLists.txt          # CMake build configuration
    ├── README.md               # Project overview
-   ├── LICENSE                  # GPL v3
-   ├── build_and_run.sh        # Build and run script
+   ├── LICENSE                 # GPL v3
+   ├── Dockerfile              # Authoritative CI/validation image
+   ├── build.sh                # Configure + build
    ├── build_docs.sh           # Documentation build script
+   ├── run.sh                  # Build + run gates on a file
    ├── run_tests.sh            # Test runner script
    │
+   ├── ci/
+   │   └── run_validation.sh   # Full validation: build, ctest, smoke-translate, docs, cppcheck
+   │
    ├── include/                # Public header files
-   │   ├── astnode.h           # AST node structures
+   │   ├── astnode.h           # AST node types and structure
    │   ├── codegen_vhdl.h      # VHDL code generator API
+   │   ├── config.h            # GATES_MAX_* build-time limits
    │   ├── error_handler.h     # Centralized error/warning reporting
    │   ├── parse.h             # Parser main API
    │   ├── symbol_arrays.h     # Array symbol table API
    │   ├── symbol_structs.h    # Struct symbol table API
    │   ├── token.h             # Token types, Token struct, ParserContext
-   │   └── utils.h             # Utility functions
+   │   └── utils.h             # Precedence, string-safety utilities
    │
    ├── src/                    # Source code
    │   ├── error_handler.c     # Error handler implementation
@@ -124,50 +132,55 @@ Directory Structure
    │   │   └── gates.c         # Main function
    │   ├── core/               # Core data structures
    │   │   ├── astnode.c       # AST node create/add_child/free
-   │   │   └── utils.c         # Utilities (safe_strdup, print_ast, etc.)
-   │   ├── parser/             # Parser components
-   │   │   ├── parse.c         # Main parser driver
-   │   │   ├── parse_control_flow.c  # if/else, while, for, break
-   │   │   ├── parse_expression.c    # Expressions with precedence climbing
-   │   │   ├── parse_function.c      # Function declarations
-   │   │   ├── parse_statement.c     # Variables, assignments, returns
-   │   │   ├── parse_struct.c        # Struct definitions
-   │   │   ├── token.c               # Lexer implementation
-   │   │   ├── tokenizer.h           # Internal lexer API
-   │   │   ├── parse_control_flow.h  # Internal header
-   │   │   ├── parse_expression.h    # Internal header
-   │   │   ├── parse_function.h      # Internal header
-   │   │   ├── parse_statement.h     # Internal header
-   │   │   └── parse_struct.h        # Internal header
-   │   ├── codegen/            # Code generation
+   │   │   └── utils.c         # safe_strdup, precedence table, print_ast, ...
+   │   ├── parser/              # Parser components (see :doc:`parser`, :doc:`lexer`)
+   │   │   ├── parse.c
+   │   │   ├── parse_control_flow.c
+   │   │   ├── parse_expression.c
+   │   │   ├── parse_for.c
+   │   │   ├── parse_function.c
+   │   │   ├── parse_statement.c
+   │   │   ├── parse_struct.c
+   │   │   ├── token.c
+   │   │   ├── tokenizer.h            # Internal lexer API
+   │   │   └── parse_*.h              # Internal headers, one per .c above
+   │   ├── codegen/             # Code generation, 7 .c files (see :doc:`codegen`)
    │   │   ├── codegen_vhdl_main.c
+   │   │   ├── codegen_vhdl_emit.c
    │   │   ├── codegen_vhdl_expressions.c
    │   │   ├── codegen_vhdl_statements.c
    │   │   ├── codegen_vhdl_helpers.c
    │   │   ├── codegen_vhdl_types.c
    │   │   ├── codegen_vhdl_constants.c
-   │   │   └── (internal .h headers)
-   │   └── symbols/            # Symbol tables
+   │   │   └── (matching internal .h headers)
+   │   └── symbols/             # Symbol tables (see :doc:`symbols`)
    │       ├── symbol_arrays.c
    │       └── symbol_structs.c
    │
-   ├── examples/               # Example C files for testing
+   ├── examples/                # Example C files
+   │   ├── ci_validate.c        # Smoke-translated by ci/run_validation.sh
    │   ├── example.c
    │   ├── function_calls.c
    │   ├── struct_example.c
-   │   └── test_error_handler.c
+   │   ├── test_error_handler.c
+   │   └── doc/                 # Golden C/VHDL pairs literalinclude'd into examples.rst
    │
-   ├── tests/                  # GoogleTest unit/integration tests
-   │   ├── basic_tests.cpp
-   │   ├── edge_case_tests.cpp
-   │   ├── integration_tests.cpp
-   │   └── test_error_handler.cpp
+   ├── tests/                   # GoogleTest + CTest (see :doc:`../testing`)
+   │   ├── unit/
+   │   │   ├── basic_tests.cpp
+   │   │   ├── edge_case_tests.cpp
+   │   │   └── test_error_handler.cpp
+   │   ├── integration/
+   │   │   └── integration_tests.cpp
+   │   └── cli/                 # Fixtures for CTest cases that invoke the gates binary directly
+   │       └── too_many_params.c
    │
-   ├── tools/                  # Development tools
+   ├── tools/                   # Development tools
    │   ├── run_cppcheck.sh
+   │   ├── check_doc_examples.sh
    │   └── cppcheck_suppressions.txt
    │
-   └── docs/                   # Sphinx documentation
+   └── docs/                    # Sphinx documentation
        ├── Makefile
        └── source/
            ├── conf.py
@@ -214,9 +227,12 @@ The parser uses a **recursive descent** strategy:
 1. ``parse_program()`` initializes a ``ParserContext`` and enters the parsing loop
 2. Dispatches to sub-parsers based on the current token:
 
-   - ``parse_struct()`` for struct definitions
+   - ``parse_struct()`` for struct definitions (and functions returning a struct)
    - ``parse_function()`` for function declarations
-   - ``parse_variable_declaration()`` for global variables
+
+   Global variables are **not supported**: a type/identifier pair at top
+   level not followed by ``(`` is a parse error, not silently accepted (see
+   :doc:`parser`).
 
 3. Each sub-parser builds AST nodes and registers symbols:
 
@@ -322,11 +338,10 @@ Module dependency graph (``→`` means "depends on"):
      → parse.h, codegen_vhdl.h, error_handler.h, utils.h
 
    src/parser/parse.c
-     → tokenizer.h, parse_expression.h, parse_struct.h,
-       parse_function.h, parse_statement.h, error_handler.h
+     → tokenizer.h, parse_struct.h, parse_function.h, error_handler.h
 
    src/parser/parse_*.c
-     → tokenizer.h, astnode.h, error_handler.h, utils.h,
+     → tokenizer.h, astnode.h, error_handler.h, utils.h, config.h (for GATES_MAX_PARSE_DEPTH),
        symbol_arrays.h / symbol_structs.h (as needed)
 
    src/codegen/codegen_vhdl_main.c
